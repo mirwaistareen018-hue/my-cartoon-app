@@ -1,94 +1,97 @@
 import streamlit as st
-from PIL import Image
-import requests
-from io import BytesIO
-import random, os, time
 from gtts import gTTS
-from moviepy.editor import ImageSequenceClip, AudioFileClip, CompositeAudioClip
+import os
 
-st.set_page_config(page_title="COCOMELON VIDEO APP", layout="wide")
-st.title("Talking Video Generator")
-st.success("App is Working - Video Mode ON")
+# Page Config
+st.set_page_config(page_title="Long Video Studio PRO", page_icon="🎬", layout="wide")
 
-def get_image(prompt, retries=3):
-    for attempt in range(retries):
-        try:
-            q = requests.utils.quote(prompt)
-            seed = random.randint(1, 999999)
-            # Try pollinations with cache bust
-            url = f"https://image.pollinations.ai/prompt/{q}?width=1024&height=576&seed={seed}&nologo=true"
-            headers = {"User-Agent": "Mozilla/5.0"}
-            r = requests.get(url, headers=headers, timeout=60)
-            if r.status_code == 200 and len(r.content) > 5000:
-                img = Image.open(BytesIO(r.content)).convert("RGB")
-                w, h = img.size
-                # crop watermark
-                if h > 30:
-                    img = img.crop((0, 0, w, h-25))
-                return img
-        except Exception as e:
-            st.warning(f"Attempt {attempt+1} failed, retrying...")
-            time.sleep(2)
-    return None
+st.title("Long Video Studio PRO - 5 Min to 1 Hour")
+st.write("Original Long Video Maker - No Copyright")
 
-story_text = st.text_area("Write Story Script:", "A small cute mouse is eating cheese on the table, then a big cat comes")
-lang = st.selectbox("Select Voice Language", ["en", "ur"])
-btn = st.button("GENERATE VIDEO")
+# Sidebar Settings
+st.sidebar.header("Settings")
+video_length = st.sidebar.select_slider(
+    "Select Video Length",
+    options=["5 Minutes", "8 Minutes", "15 Minutes", "1 Hour"]
+)
 
-if btn:
-    if not story_text.strip():
-        st.error("Please write story first")
+scene_count_map = {
+    "5 Minutes": 10,
+    "8 Minutes": 16,
+    "15 Minutes": 30,
+    "1 Hour": 100
+}
+num_scenes = scene_count_map[video_length]
+st.sidebar.info(f"Total Scenes: {num_scenes}")
+
+# Main Input
+user_idea = st.text_input("Enter Your Story Idea:", "A thirsty crow searching for water")
+
+# Story Logic - English Only
+def generate_story(idea, total_scenes):
+    story_template = [
+        f"The story of {idea} begins, everyone is happy",
+        f"Suddenly {idea} faces a big problem",
+        f"{idea} goes on a journey to find a solution",
+        f"On the way, {idea} meets a new friend",
+        f"Both make a clever plan together",
+        f"The first attempt fails but they don't give up",
+        f"They try again with more effort",
+        f"Finally their hard work pays off",
+        f"Everyone celebrates and is very happy",
+        f"Moral of the story: hard work always wins"
+    ]
+    
+    full_story = []
+    for i in range(1, total_scenes + 1):
+        line = story_template[(i-1) % len(story_template)]
+        full_story.append(f"Scene {i}: {line}.")
+    return full_story
+
+# Generate Button
+if st.button(f"Generate {video_length} Full Movie", type="primary", use_container_width=True):
+    
+    if not user_idea:
+        st.error("Please enter story idea first!")
     else:
-        with st.spinner("Generating Images... This may take 60 seconds..."):
-            prompts = [
-                f"cute 3d pixar baby mouse eating cheese on table, warm light, {story_text}",
-                f"big fluffy cat entering room looking at mouse, 3d pixar style",
-                f"cute mouse running away scared from cat, 3d pixar style"
-            ]
+        st.success(f"Generating {video_length} movie with {num_scenes} scenes...")
+        
+        progress = st.progress(0)
+        story_list = generate_story(user_idea, num_scenes)
+        
+        full_text_for_audio = ""
+        container = st.container()
+        
+        for idx, scene in enumerate(story_list):
+            progress.progress((idx + 1) / num_scenes)
+            full_text_for_audio += scene + " "
+            with container:
+                st.write(f"✅ {scene}")
+
+        st.divider()
+        st.subheader("Full Script Ready!")
+        st.write(full_text_for_audio)
+
+        # Audio Generation
+        st.subheader("Generating Audio...")
+        try:
+            tts = gTTS(text=full_text_for_audio, lang='en', slow=False)
+            audio_file = "final_movie_audio.mp3"
+            tts.save(audio_file)
             
-            temp_images = []
-            for i, p in enumerate(prompts):
-                st.write(f"Generating Scene {i+1}...")
-                img = get_image(p)
-                if img:
-                    st.image(img, caption=f"Scene {i+1}")
-                    path = f"/tmp/scene_{i}.jpg"
-                    img.save(path)
-                    temp_images.append(path)
-                else:
-                    st.error(f"Scene {i+1} failed")
-
-            if len(temp_images) >= 1:
-                st.write("Generating Voice and Video...")
-                try:
-                    # Voice
-                    tts = gTTS(text=story_text, lang=lang, slow=False)
-                    tts.save("/tmp/voice.mp3")
-                    voice_clip = AudioFileClip("/tmp/voice.mp3")
-
-                    # Video clip - each image shows for equal time
-                    clip = ImageSequenceClip(temp_images, fps=1)
-                    clip = clip.set_duration(voice_clip.duration)
-
-                    # Background music if exists
-                    if os.path.exists("song.mp3"):
-                        try:
-                            bg_music = AudioFileClip("song.mp3").subclip(0, voice_clip.duration).volumex(0.15)
-                            final_audio = CompositeAudioClip([voice_clip, bg_music])
-                        except:
-                            final_audio = voice_clip
-                    else:
-                        final_audio = voice_clip
-
-                    final_clip = clip.set_audio(final_audio)
-                    final_clip.write_videofile("/tmp/final_video.mp4", fps=24, codec='libx264', audio_codec='aac', logger=None)
-                    
-                    st.video("/tmp/final_video.mp4")
-                    with open("/tmp/final_video.mp4", "rb") as f:
-                        st.download_button("Download Video", f, file_name="cocomelon_video.mp4")
-                    st.balloons()
-                    st.success("Video Ready!")
-                except Exception as e:
-                    st.error(f"Video error: {e}")
-            else:
-                st.error("Failed to generate images, please try again. Server is busy, press GENERATE VIDEO again.")
+            st.audio(audio_file)
+            
+            with open(audio_file, "rb") as f:
+                st.download_button(
+                    label="Download Final Audio",
+                    data=f,
+                    file_name=audio_file,
+                    mime="audio/mp3",
+                    use_container_width=True
+                )
+            
+            st.balloons()
+            st.success(f"Done! Your {video_length} movie script and audio is ready!")
+            
+        except Exception as e:
+            st.error(f"Error: {e}")
