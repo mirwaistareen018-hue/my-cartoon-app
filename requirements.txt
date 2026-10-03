@@ -1,7 +1,4 @@
 streamlit
-Pillow
-requests
-imageio
-imageio-ffmpeg
-moviepy==1.0.3
+openai
+python-dotenv
 gTTS
