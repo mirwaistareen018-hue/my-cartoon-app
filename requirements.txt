@@ -1,5 +1,6 @@
 streamlit
-gTTS
 moviepy
-pillow
-pydub
+Pillow
+gtts
+numpy
+edge-tts
