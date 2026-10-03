@@ -1,116 +1,139 @@
 import streamlit as st
+import requests
+import io
+from PIL import Image, ImageDraw
+import numpy as np
 import asyncio
 import edge_tts
 from gtts import gTTS
-from PIL import Image, ImageDraw
-import numpy as np
-import random
 from moviepy.editor import VideoClip, AudioFileClip, CompositeAudioClip
+import random
 
-st.set_page_config(page_title="Cocomelon Pro", page_icon="🌈", layout="wide")
-st.markdown("<h1 style='text-align:center;color:red;'>🌈 COCOMELON A TO Z - FINAL FIXED 🌈</h1>", unsafe_allow_html=True)
+st.set_page_config(page_title="Cocomelon AI Brain", page_icon="🧠", layout="wide")
+st.markdown("<h1 style='text-align:center;color:red;'>🧠 COCOMELON - AI BRAIN AUTO SYSTEM 🧠</h1>", unsafe_allow_html=True)
 
-# --- 100% ENGLISH DATABASE ---
-ANIMALS = {
-    "Cat": (255, 182, 193),
-    "Dog": (210, 180, 140),
-    "Cow": (255, 255, 255),
-    "Buffalo": (80, 80, 80),
-    "Lion": (255, 215, 0),
-    "Elephant": (150, 150, 150),
-    "Monkey": (139, 69, 19),
-    "Rabbit": (255, 240, 245),
-}
+MODELS = [f"Model {i} - Auto AI Brain" for i in range(1, 10001)]
+VOICES = {"Ana - Baby Girl": "en-US-AnaNeural"}
 
-JUNGLES = ["Green Jungle", "Farm House", "River Side", "Beach", "Snow Mountain", "Night Jungle", "Village", "School"]
-MODELS = [f"Model {i} - {random.choice(list(ANIMALS.keys()))} in {random.choice(JUNGLES)}" for i in range(1, 10001)]
-VOICES = {
-    "Ana - Cute Baby Girl": "en-US-AnaNeural",
-    "Ava - Tiny Girl": "en-US-AvaMultilingualNeural",
-    "Jenny - School Girl": "en-US-JennyNeural",
-}
+# --- AI BRAIN FUNCTION ---
+def ai_brain_generate_image(prompt_text):
+    try:
+        # Free AI Image API - No Key Needed
+        url = f"https://image.pollinations.ai/prompt/{prompt_text}?width=512&height=512&nologo=true&model=turbo"
+        response = requests.get(url, timeout=30)
+        if response.status_code == 200:
+            img = Image.open(io.BytesIO(response.content)).convert("RGBA")
+            return img
+    except Exception as e:
+        st.warning(f"AI Image Error: {e}")
+    return None
 
-async def make_voice(text, voice_id):
-    communicate = edge_tts.Communicate(text, voice_id, pitch="+18Hz", rate="+0%")
-    audio_data = b""
-    async for chunk in communicate.stream():
+async def make_voice(text, vid):
+    comm = edge_tts.Communicate(text, vid, pitch="+18Hz", rate="+0%")
+    data = b""
+    async for chunk in comm.stream():
         if chunk["type"] == "audio":
-            audio_data += chunk["data"]
-    return audio_data
+            data += chunk["data"]
+    return data
+
+def extract_animals_from_story(story):
+    story_lower = story.lower()
+    found = []
+    keywords = {
+        "cat": "cat", "billi": "cat", "wolf": "cat",
+        "mouse": "mouse", "chuha": "mouse", "rat": "mouse",
+        "dog": "dog", "cow": "cow", "buffalo": "buffalo",
+        "lion": "lion", "elephant": "elephant", "rabbit": "rabbit"
+    }
+    for key, animal in keywords.items():
+        if key in story_lower and animal not in found:
+            found.append(animal)
+    if not found:
+        found = ["mouse", "cat"]
+    return found[:3]
 
 # --- UI ---
 c1, c2 = st.columns(2)
 with c1:
-    model = st.selectbox("Select Model (10,000+ Models)", MODELS)
-    bg_tool = st.selectbox("Select Background Tool", JUNGLES)
-    prompt = st.text_area("Chat Prompt - Enter Story", "Mimi cat, dog, cow and buffalo are best friends, they go to jungle school and sing ABC song", height=130)
-
+    model = st.selectbox("Select Model (10000+)", MODELS)
+    story = st.text_area("Story Prompt - AI Brain Will Auto Understand", "Mouse is eating cheese inside small door house, big gray wolf cat comes running fast to catch mouse, mouse gets scared", height=120)
 with c2:
-    selected_animals = st.multiselect("Select Animals (All Visible)", list(ANIMALS.keys()), default=["Cat", "Dog", "Cow", "Buffalo"])
-    voice_choice = st.selectbox("Select Kids Voice", list(VOICES.keys()))
-    music_file = st.file_uploader("Upload Background Music MP3 (Optional for Cocomelon Music)", type=["mp3", "wav"])
-    music_vol = st.slider("Music Volume", 0.05, 0.4, 0.15)
+    voice_name = st.selectbox("Voice", list(VOICES.keys()))
+    music_file = st.file_uploader("Background Music MP3 (Optional)", type=["mp3","wav"])
+    st.info("🧠 AI Brain: Aap sirf kahani likho, AI khud characters bana lega!")
 
-if st.button("🚀 GENERATE COCOMELON VIDEO - FINAL", type="primary", use_container_width=True):
-    full_story = f"Hello kids! Welcome to Cocomelon! {prompt}. Today our heroes are {', '.join(selected_animals)} in {bg_tool}. This is {model}. They sing Twinkle Twinkle, Johnny Johnny Yes Papa, ABC Song!"
-    st.success("Story Ready!")
-    st.write(full_story)
+if st.button("🚀 GENERATE WITH AI BRAIN - AUTO", type="primary", use_container_width=True):
+    st.write(f"**Story:** {story}")
 
-    # Voice
-    with st.spinner("Generating Voice..."):
+    # Step 1: AI Brain Understands Story
+    with st.spinner("🧠 AI Brain Soch Raha Hai... Characters Samajh Raha Hai..."):
+        characters = extract_animals_from_story(story)
+        st.success(f"🧠 AI Brain Ne Samjha: Isko chahiye {', '.join(characters)}")
+
+    # Step 2: AI Brain Generates Images
+    generated_images = {}
+    with st.spinner(f"🎨 AI Brain Images Bana Raha Hai: {characters}"):
+        for char in characters:
+            prompt_3d = f"cute 3d pixar cartoon {char}, big eyes, soft fur, tom and jerry style, white background, high quality, 3d render"
+            img = ai_brain_generate_image(prompt_3d)
+            if img:
+                generated_images[char] = img
+                st.image(img, caption=f"AI Generated: {char}", width=150)
+
+    # Step 3: Voice
+    with st.spinner("🎤 Voice Bana Raha Hai..."):
+        full_text = f"Hello kids! {story}. This is {model}"
         try:
-            audio_bytes = asyncio.run(make_voice(full_story, VOICES[voice_choice]))
-            with open("voice.mp3", "wb") as f:
-                f.write(audio_bytes)
-            st.audio(audio_bytes)
-        except Exception as e:
-            st.warning(f"Using Backup Voice: {e}")
-            tts = gTTS(full_story, lang='en')
-            tts.save("voice.mp3")
-            st.audio("voice.mp3")
+            audio_bytes = asyncio.run(make_voice(full_text, VOICES[voice_name]))
+            open("voice.mp3","wb").write(audio_bytes)
+        except:
+            gTTS(full_text, lang='en').save("voice.mp3")
+        st.audio("voice.mp3")
 
-    # Video
-    with st.spinner("Generating Video..."):
-        def make_frame(t):
-            img = Image.new('RGB', (1280, 720), (34, 139, 34))
-            d = ImageDraw.Draw(img)
-            d.rectangle([0, 500, 1280, 720], fill=(85, 170, 85))
-            for idx, name in enumerate(selected_animals[:6]):
-                color = ANIMALS[name]
-                cx = 40 + idx * 200 + int(t * 30) % 50
-                cy = 350
-                d.ellipse([cx, cy, cx+120, cy+90], fill=color, outline=(0,0,0), width=3)
-                d.ellipse([cx+70, cy-20, cx+130, cy+30], fill=color, outline=(0,0,0), width=3)
-                d.ellipse([cx+85, cy, cx+100, cy+15], fill=(0,0,0))
-                d.ellipse([cx+110, cy, cx+125, cy+15], fill=(0,0,0))
-                d.text((cx, cy+100), name, fill=(255,255,255))
-            d.text((20, 20), f"{model[:80]} | {bg_tool}", fill=(255,255,0))
-            return np.array(img)
+    # Step 4: Video with Auto Images
+    def make_frame(t):
+        # House background like your video
+        img_bg = Image.new('RGB', (1280, 720), (240, 230, 140))
+        d = ImageDraw.Draw(img_bg)
+        d.rectangle([0,0,1280,500], fill=(245,245,245))
+        d.rectangle([0,500,1280,720], fill=(240,230,140))
+        d.rectangle([500,250,650,500], fill=(255,255,200), outline=(100,180,180), width=8)
 
-        try:
-            voice_clip = AudioFileClip("voice.mp3")
+        # Paste AI generated characters with auto movement
+        for idx, (char_name, char_img) in enumerate(generated_images.items()):
+            char_img_resized = char_img.resize((220, 220))
+            if idx == 0: # First character - static near door
+                x, y = 480, 350
+            else: # Second character - running like your video
+                x = int(1100 - (t*180) % 1300)
+                y = 300 + int(abs(np.sin(t*3))*20)
 
-            if music_file is not None:
-                with open("bg_music.mp3", "wb") as f:
-                    f.write(music_file.getbuffer())
-                bg_clip = AudioFileClip("bg_music.mp3")
-                if bg_clip.duration < voice_clip.duration:
-                    bg_clip = bg_clip.loop(duration=voice_clip.duration)
-                else:
-                    bg_clip = bg_clip.subclip(0, voice_clip.duration)
-                bg_clip = bg_clip.volumex(music_vol)
-                final_audio = CompositeAudioClip([voice_clip, bg_clip])
+            # Paste with transparency
+            temp_bg = Image.new('RGBA', (1280,720), (0,0,0,0))
+            temp_bg.paste(char_img_resized, (x, y), char_img_resized)
+            img_bg = Image.alpha_composite(img_bg.convert('RGBA'), temp_bg).convert('RGB')
+
+        return np.array(img_bg)
+
+    try:
+        voice_clip = AudioFileClip("voice.mp3")
+        if music_file:
+            open("bg.mp3","wb").write(music_file.getbuffer())
+            bg_clip = AudioFileClip("bg.mp3")
+            if bg_clip.duration < voice_clip.duration:
+                bg_clip = bg_clip.loop(duration=voice_clip.duration)
             else:
-                final_audio = voice_clip
+                bg_clip = bg_clip.subclip(0, voice_clip.duration)
+            final_audio = CompositeAudioClip([voice_clip, bg_clip.volumex(0.18)])
+        else:
+            final_audio = voice_clip
 
-            video_clip = VideoClip(make_frame, duration=voice_clip.duration)
-            video_clip = video_clip.set_audio(final_audio)
-            video_clip.write_videofile("final.mp4", fps=24, codec='libx264', audio_codec='aac', logger=None)
-
-            st.video("final.mp4")
-            with open("final.mp4", "rb") as f:
-                st.download_button("📥 DOWNLOAD VIDEO MP4", f, file_name="Cocomelon_Final.mp4", mime="video/mp4", use_container_width=True)
-            st.balloons()
-            st.success("Done! Video Generated Successfully!")
-        except Exception as e:
-            st.error(f"Video Error: {e}")
+        video = VideoClip(make_frame, duration=voice_clip.duration).set_audio(final_audio)
+        video.write_videofile("final.mp4", fps=24, codec='libx264', audio_codec='aac', logger=None)
+        st.video("final.mp4")
+        with open("final.mp4","rb") as f:
+            st.download_button("📥 DOWNLOAD AI BRAIN VIDEO", f, file_name="AI_Brain_Cartoon.mp4", mime="video/mp4", use_container_width=True)
+        st.balloons()
+        st.success(f"🧠 AI Brain Ne Khud {len(generated_images)} Characters Bana Kar Video Bana Di!")
+    except Exception as e:
+        st.error(f"Error: {e}")
