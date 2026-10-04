@@ -21,7 +21,7 @@ else:
     if st.button("Test OpenAI Connection"):
         try:
             response = client.responses.create(
-                model="gpt-4o-mini"
+                model="gpt-4o-mini",
                 input="Say hello in one short sentence."
             )
 
