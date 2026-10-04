@@ -1,5 +1,8 @@
 import streamlit as st
 from huggingface_hub import InferenceClient
+from PIL import Image
+import io
+import os
 
 st.set_page_config(
     page_title="AI Cartoon Video Studio",
@@ -8,7 +11,6 @@ st.set_page_config(
 )
 
 st.title("🎬 AI Cartoon Video Studio")
-
 
 # ==================================================
 # SESSION STATE
@@ -19,6 +21,9 @@ if "scenes" not in st.session_state:
 
 if "generated_images" not in st.session_state:
     st.session_state.generated_images = {}
+
+if "video_files" not in st.session_state:
+    st.session_state.video_files = {}
 
 if "project_created" not in st.session_state:
     st.session_state.project_created = False
@@ -55,6 +60,42 @@ def generate_image(prompt):
 
 
 # ==================================================
+# CREATE SIMPLE ANIMATED VIDEO
+# ==================================================
+
+def create_video(image, output_path, duration=5):
+
+    try:
+
+        from moviepy import ImageClip
+
+        image_path = output_path.replace(".mp4", ".png")
+
+        image.save(image_path)
+
+        clip = ImageClip(image_path).with_duration(duration)
+
+        clip = clip.resized(height=720)
+
+        clip = clip.with_position("center")
+
+        clip.write_videofile(
+            output_path,
+            fps=24,
+            codec="libx264",
+            audio=False
+        )
+
+        clip.close()
+
+        return True, None
+
+    except Exception as e:
+
+        return False, str(e)
+
+
+# ==================================================
 # LANGUAGE
 # ==================================================
 
@@ -74,14 +115,14 @@ if language == "اردو":
 
     script = st.text_area(
         "کہانی:",
-        placeholder="مثال: ایک بہادر بلی جادوئی جنگل میں خزانہ تلاش کرنے جاتی ہے۔",
+        placeholder="مثال: ایک پیاری مرغی اپنے بچوں کے ساتھ کھیت میں جاتی ہے۔",
         height=180
     )
 
     scene_count = st.slider(
         "کتنے Scenes؟",
-        5,
-        20,
+        1,
+        10,
         5
     )
 
@@ -93,14 +134,14 @@ else:
 
     script = st.text_area(
         "Story:",
-        placeholder="Example: A brave cat enters a magical forest to find a treasure.",
+        placeholder="Example: A cute hen goes to the farm with her chicks.",
         height=180
     )
 
     scene_count = st.slider(
         "Number of Scenes",
-        5,
-        20,
+        1,
+        10,
         5
     )
 
@@ -128,13 +169,13 @@ def create_scene_plan(story, count, language):
 
                 "image_prompt": (
                     f"2D colorful cartoon scene, scene {i}, "
-                    f"cute main character, consistent character design, "
+                    f"cute hen, consistent character design, "
                     f"cinematic composition, detailed background, "
                     f"based on this story: {story}"
                 ),
 
                 "animation_prompt":
-                    f"Scene {i} میں قدرتی کردار کی حرکت اور camera movement",
+                    f"Scene {i} میں مرغی کی ہلکی قدرتی حرکت اور camera movement",
 
                 "dialogue":
                     f"Scene {i} کا مکالمہ",
@@ -154,7 +195,7 @@ def create_scene_plan(story, count, language):
 
                 "image_prompt": (
                     f"2D colorful cartoon scene, scene {i}, "
-                    f"cute main character, consistent character design, "
+                    f"cute hen, consistent character design, "
                     f"cinematic composition, detailed background, "
                     f"based on this story: {story}"
                 ),
@@ -173,7 +214,7 @@ def create_scene_plan(story, count, language):
 
 
 # ==================================================
-# CREATE PROJECT BUTTON
+# CREATE PROJECT
 # ==================================================
 
 if st.button(button_text, type="primary"):
@@ -195,7 +236,7 @@ if st.button(button_text, type="primary"):
         )
 
         st.session_state.generated_images = {}
-
+        st.session_state.video_files = {}
         st.session_state.project_created = True
 
 
@@ -211,39 +252,22 @@ if st.session_state.project_created:
         else "✅ Cartoon Project created!"
     )
 
-
-    # ==================================================
-    # CHARACTER BIBLE
-    # ==================================================
-
     st.header("🎭 Character Bible")
 
-    if language == "اردو":
-
-        st.write(
-            "مرکزی کردار کی شکل، لباس اور بنیادی خصوصیات "
-            "تمام Scenes میں مستقل رکھی جائیں گی۔"
-        )
-
-    else:
-
-        st.write(
-            "The character's appearance, clothing and core traits "
-            "will stay consistent across scenes."
-        )
-
-
-    # ==================================================
-    # SCENES
-    # ==================================================
+    st.write(
+        "مرکزی کردار کی شکل، لباس اور بنیادی خصوصیات "
+        "تمام Scenes میں مستقل رکھی جائیں گی۔"
+        if language == "اردو"
+        else
+        "The character's appearance, clothing and core traits "
+        "will stay consistent across scenes."
+    )
 
     st.header("🎬 Scene Plan")
-
 
     for item in st.session_state.scenes:
 
         scene_number = item["scene"]
-
 
         with st.expander(
             f"🎬 Scene {scene_number}",
@@ -262,21 +286,8 @@ if st.session_state.project_created:
                 f"🖼️ **Image Prompt:** {item['image_prompt']}"
             )
 
-            st.write(
-                f"🎥 **Animation:** {item['animation_prompt']}"
-            )
-
-            st.write(
-                f"🗣️ **Dialogue:** {item['dialogue']}"
-            )
-
-            st.write(
-                f"🔊 **Sound/Music:** {item['sound']}"
-            )
-
-
             # ==========================================
-            # SHOW EXISTING IMAGE
+            # IMAGE
             # ==========================================
 
             if scene_number in st.session_state.generated_images:
@@ -286,9 +297,8 @@ if st.session_state.project_created:
                     caption=f"Scene {scene_number}"
                 )
 
-
             # ==========================================
-            # GENERATE IMAGE BUTTON
+            # GENERATE IMAGE
             # ==========================================
 
             if st.button(
@@ -299,13 +309,13 @@ if st.session_state.project_created:
                 with st.spinner(
                     "🎨 AI تصویر بنا رہا ہے..."
                     if language == "اردو"
-                    else "🎨 Generating AI image..."
+                    else
+                    "🎨 Generating AI image..."
                 ):
 
                     image, error = generate_image(
                         item["image_prompt"]
                     )
-
 
                 if image is not None:
 
@@ -315,24 +325,89 @@ if st.session_state.project_created:
 
                     st.rerun()
 
-
                 else:
 
                     st.error(
                         f"❌ Image generation error: {error}"
                     )
 
+            # ==========================================
+            # CREATE VIDEO
+            # ==========================================
 
-    # ==================================================
-    # PIPELINE
-    # ==================================================
+            if scene_number in st.session_state.generated_images:
 
-    st.divider()
+                if st.button(
+                    f"🎥 Scene {scene_number} کو Video بنائیں",
+                    key=f"video_{scene_number}"
+                ):
 
-    st.header("🚧 AI Generation Pipeline")
+                    os.makedirs("videos", exist_ok=True)
 
-    st.write(
-        "📝 Story → 🎬 Scenes → 🖼️ Images → "
-        "🎥 Animation → 🗣️ Voice → 🎵 Music → "
-        "✂️ Editing → 🎞️ MP4"
-    )
+                    output_path = (
+                        f"videos/scene_{scene_number}.mp4"
+                    )
+
+                    with st.spinner(
+                        "🎥 تصویر سے ویڈیو بن رہی ہے..."
+                    ):
+
+                        success, error = create_video(
+                            st.session_state.generated_images[
+                                scene_number
+                            ],
+                            output_path
+                        )
+
+                    if success:
+
+                        st.session_state.video_files[
+                            scene_number
+                        ] = output_path
+
+                        st.success(
+                            "✅ Scene کی MP4 ویڈیو تیار ہے!"
+                        )
+
+                    else:
+
+                        st.error(
+                            f"❌ Video error: {error}"
+                        )
+
+            # ==========================================
+            # SHOW VIDEO
+            # ==========================================
+
+            if scene_number in st.session_state.video_files:
+
+                video_path = st.session_state.video_files[
+                    scene_number
+                ]
+
+                st.video(video_path)
+
+                with open(video_path, "rb") as video_file:
+
+                    st.download_button(
+                        "⬇️ MP4 Download کریں",
+                        video_file,
+                        file_name=f"scene_{scene_number}.mp4",
+                        mime="video/mp4",
+                        key=f"download_{scene_number}"
+                    )
+
+
+# ==================================================
+# PIPELINE
+# ==================================================
+
+st.divider()
+
+st.header("🚧 AI Generation Pipeline")
+
+st.write(
+    "📝 Story → 🎬 Scenes → 🖼️ Images → "
+    "🎥 Animation → 🗣️ Voice → 🎵 Music → "
+    "✂️ Editing → 🎞️ MP4"
+                    )
