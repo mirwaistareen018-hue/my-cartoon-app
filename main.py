@@ -1,4 +1,5 @@
 import streamlit as st
+from huggingface_hub import InferenceClient
 
 st.set_page_config(
     page_title="AI Cartoon Video Studio",
@@ -8,12 +9,51 @@ st.set_page_config(
 
 st.title("🎬 AI Cartoon Video Studio")
 
+
+# -----------------------------
+# Hugging Face Image Generator
+# -----------------------------
+
+def generate_image(prompt):
+
+    token = st.secrets.get("HF_TOKEN")
+
+    if not token:
+        return None, "HF_TOKEN نہیں ملا۔ Streamlit Secrets چیک کریں۔"
+
+    try:
+        client = InferenceClient(
+            api_key=token,
+            provider="auto"
+        )
+
+        image = client.text_to_image(
+            prompt=prompt,
+            model="black-forest-labs/FLUX.1-schnell"
+        )
+
+        return image, None
+
+    except Exception as e:
+        return None, str(e)
+
+
+# -----------------------------
+# Language
+# -----------------------------
+
 language = st.selectbox(
     "زبان / Language",
     ["اردو", "English"]
 )
 
+
+# -----------------------------
+# Story Input
+# -----------------------------
+
 if language == "اردو":
+
     st.header("📝 اپنی کہانی لکھیں")
 
     script = st.text_area(
@@ -32,6 +72,7 @@ if language == "اردو":
     button_text = "🎬 Cartoon Project بنائیں"
 
 else:
+
     st.header("📝 Write Your Story")
 
     script = st.text_area(
@@ -50,6 +91,10 @@ else:
     button_text = "🎬 Create Cartoon Project"
 
 
+# -----------------------------
+# Scene Planner
+# -----------------------------
+
 def create_scene_plan(story, count, language):
 
     scenes = []
@@ -62,10 +107,22 @@ def create_scene_plan(story, count, language):
                 "scene": i,
                 "story": f"{story} — حصہ {i}",
                 "character": "مرکزی کردار",
-                "image_prompt": f"2D cartoon style scene {i}, based on: {story}",
-                "animation_prompt": f"Scene {i} میں کردار کی قدرتی حرکت اور camera movement",
-                "dialogue": f"Scene {i} کا مکالمہ",
-                "sound": f"Scene {i} کے لیے background music اور sound effects"
+
+                "image_prompt": (
+                    f"2D colorful cartoon scene, scene {i}, "
+                    f"cute main character, consistent character design, "
+                    f"cinematic composition, detailed background, "
+                    f"based on this story: {story}"
+                ),
+
+                "animation_prompt":
+                    f"Natural character movement and camera movement for scene {i}",
+
+                "dialogue":
+                    f"Scene {i} کا مکالمہ",
+
+                "sound":
+                    f"Scene {i} کے لیے background music اور sound effects"
             })
 
         else:
@@ -74,14 +131,30 @@ def create_scene_plan(story, count, language):
                 "scene": i,
                 "story": f"{story} — Part {i}",
                 "character": "Main Character",
-                "image_prompt": f"2D cartoon style scene {i}, based on: {story}",
-                "animation_prompt": f"Natural character movement and camera movement for scene {i}",
-                "dialogue": f"Dialogue for scene {i}",
-                "sound": f"Background music and sound effects for scene {i}"
+
+                "image_prompt": (
+                    f"2D colorful cartoon scene, scene {i}, "
+                    f"cute main character, consistent character design, "
+                    f"cinematic composition, detailed background, "
+                    f"based on this story: {story}"
+                ),
+
+                "animation_prompt":
+                    f"Natural character movement and camera movement for scene {i}",
+
+                "dialogue":
+                    f"Dialogue for scene {i}",
+
+                "sound":
+                    f"Background music and sound effects for scene {i}"
             })
 
     return scenes
 
+
+# -----------------------------
+# Create Project
+# -----------------------------
 
 if st.button(button_text, type="primary"):
 
@@ -95,24 +168,29 @@ if st.button(button_text, type="primary"):
 
     else:
 
-        st.success(
-            "✅ Cartoon Project تیار ہے!"
-            if language == "اردو"
-            else "✅ Cartoon Project created!"
-        )
-
         scenes = create_scene_plan(
             script,
             scene_count,
             language
         )
 
+        st.success(
+            "✅ Cartoon Project تیار ہے!"
+            if language == "اردو"
+            else "✅ Cartoon Project created!"
+        )
+
         st.header("🎭 Character Bible")
 
         if language == "اردو":
-            st.write("مرکزی کردار کی شکل، لباس اور بنیادی خصوصیات Scenes میں مستقل رکھی جائیں گی۔")
+            st.write(
+                "مرکزی کردار کی شکل، لباس اور بنیادی خصوصیات Scenes میں مستقل رکھی جائیں گی۔"
+            )
         else:
-            st.write("The character's appearance, clothing and core traits will stay consistent across scenes.")
+            st.write(
+                "The character's appearance, clothing and core traits "
+                "will stay consistent across scenes."
+            )
 
         st.header("🎬 Scene Plan")
 
@@ -123,42 +201,47 @@ if st.button(button_text, type="primary"):
                 expanded=True
             ):
 
-                if language == "اردو":
+                st.write(f"📖 **Story:** {item['story']}")
+                st.write(f"🎭 **Character:** {item['character']}")
+                st.write(f"🖼️ **Image Prompt:** {item['image_prompt']}")
+                st.write(f"🎥 **Animation:** {item['animation_prompt']}")
+                st.write(f"🗣️ **Dialogue:** {item['dialogue']}")
+                st.write(f"🔊 **Sound/Music:** {item['sound']}")
 
-                    st.write(f"📖 **کہانی:** {item['story']}")
-                    st.write(f"🎭 **Character:** {item['character']}")
-                    st.write(f"🖼️ **Image Prompt:** {item['image_prompt']}")
-                    st.write(f"🎥 **Animation:** {item['animation_prompt']}")
-                    st.write(f"🗣️ **Dialogue:** {item['dialogue']}")
-                    st.write(f"🔊 **Sound/Music:** {item['sound']}")
+                # REAL IMAGE BUTTON
+                if st.button(
+                    f"🖼️ Generate Scene {item['scene']} Image",
+                    key=f"generate_image_{item['scene']}"
+                ):
 
-                    st.button(
-                        f"🖼️ Scene {item['scene']} کی تصویر تیار کریں",
-                        key=f"image_{item['scene']}"
-                    )
+                    with st.spinner(
+                        "🎨 AI تصویر بنا رہا ہے..."
+                        if language == "اردو"
+                        else "🎨 Generating AI image..."
+                    ):
 
-                else:
+                        image, error = generate_image(
+                            item["image_prompt"]
+                        )
 
-                    st.write(f"📖 **Story:** {item['story']}")
-                    st.write(f"🎭 **Character:** {item['character']}")
-                    st.write(f"🖼️ **Image Prompt:** {item['image_prompt']}")
-                    st.write(f"🎥 **Animation:** {item['animation_prompt']}")
-                    st.write(f"🗣️ **Dialogue:** {item['dialogue']}")
-                    st.write(f"🔊 **Sound/Music:** {item['sound']}")
+                    if image is not None:
 
-                    st.button(
-                        f"🖼️ Generate Scene {item['scene']} Image",
-                        key=f"image_{item['scene']}"
-                    )
+                        st.image(
+                            image,
+                            caption=f"Scene {item['scene']}"
+                        )
+
+                    else:
+
+                        st.error(
+                            f"❌ Image generation error: {error}"
+                        )
 
         st.divider()
 
         st.header("🚧 AI Generation Pipeline")
 
-        st.write("📝 Story → 🎬 Scenes → 🖼️ Images → 🎥 Animation → 🗣️ Voice → 🎵 Music → ✂️ Editing → 🎞️ MP4")
-
-        st.info(
-            "اگلے مرحلے میں ہم ان Image buttons کو حقیقی مفت/اوپن image-generation system سے جوڑیں گے۔"
-            if language == "اردو"
-            else "Next, we will connect these image buttons to a free/open image-generation system."
-                    )
+        st.write(
+            "📝 Story → 🎬 Scenes → 🖼️ Images → 🎥 Animation → "
+            "🗣️ Voice → 🎵 Music → ✂️ Editing → 🎞️ MP4"
+    )
