@@ -18,7 +18,7 @@ if language == "اردو":
 
     script = st.text_area(
         "کہانی:",
-        placeholder="مثال: ایک بہادر بلی اپنے کتے دوست کے ساتھ جادوئی جنگل میں خزانہ تلاش کرنے جاتی ہے۔",
+        placeholder="مثال: ایک بہادر بلی جادوئی جنگل میں خزانہ تلاش کرنے جاتی ہے۔",
         height=180
     )
 
@@ -36,7 +36,7 @@ else:
 
     script = st.text_area(
         "Story:",
-        placeholder="Example: A brave cat and his dog friend enter a magical forest to find treasure.",
+        placeholder="Example: A brave cat enters a magical forest to find a treasure.",
         height=180
     )
 
@@ -50,29 +50,35 @@ else:
     button_text = "🎬 Create Cartoon Project"
 
 
-def make_scenes(story, count, language):
-    sentences = [
-        s.strip()
-        for s in story.replace("۔", ".").split(".")
-        if s.strip()
-    ]
-
-    if not sentences:
-        sentences = [story.strip()]
+def create_scene_plan(story, count, language):
 
     scenes = []
 
-    for i in range(count):
-        part = sentences[i % len(sentences)]
+    for i in range(1, count + 1):
 
         if language == "اردو":
-            scenes.append(
-                f"Scene {i + 1}: {part}"
-            )
+
+            scenes.append({
+                "scene": i,
+                "story": f"{story} — حصہ {i}",
+                "character": "مرکزی کردار",
+                "image_prompt": f"2D cartoon style scene {i}, based on: {story}",
+                "animation_prompt": f"Scene {i} میں کردار کی قدرتی حرکت اور camera movement",
+                "dialogue": f"Scene {i} کا مکالمہ",
+                "sound": f"Scene {i} کے لیے background music اور sound effects"
+            })
+
         else:
-            scenes.append(
-                f"Scene {i + 1}: {part}"
-            )
+
+            scenes.append({
+                "scene": i,
+                "story": f"{story} — Part {i}",
+                "character": "Main Character",
+                "image_prompt": f"2D cartoon style scene {i}, based on: {story}",
+                "animation_prompt": f"Natural character movement and camera movement for scene {i}",
+                "dialogue": f"Dialogue for scene {i}",
+                "sound": f"Background music and sound effects for scene {i}"
+            })
 
     return scenes
 
@@ -81,64 +87,78 @@ if st.button(button_text, type="primary"):
 
     if not script.strip():
 
-        if language == "اردو":
-            st.warning("پہلے اپنی کہانی لکھیں۔")
-        else:
-            st.warning("Please write your story first.")
+        st.warning(
+            "پہلے اپنی کہانی لکھیں۔"
+            if language == "اردو"
+            else "Please write your story first."
+        )
 
     else:
 
-        st.success("✅ Cartoon Project تیار ہے!")
+        st.success(
+            "✅ Cartoon Project تیار ہے!"
+            if language == "اردو"
+            else "✅ Cartoon Project created!"
+        )
 
-        st.header("🎭 Character Bible")
-
-        if language == "اردو":
-            st.write("مرکزی کردار پوری کہانی میں ایک جیسا رہے گا۔")
-            st.write("شکل، لباس اور بنیادی خصوصیات مستقل رہیں گی۔")
-        else:
-            st.write("The main character will remain consistent throughout the story.")
-            st.write("Appearance, clothing and core traits will stay consistent.")
-
-        st.header("🎬 Scene Plan")
-
-        scenes = make_scenes(
+        scenes = create_scene_plan(
             script,
             scene_count,
             language
         )
 
-        for scene in scenes:
+        st.header("🎭 Character Bible")
+
+        if language == "اردو":
+            st.write("مرکزی کردار کی شکل، لباس اور بنیادی خصوصیات Scenes میں مستقل رکھی جائیں گی۔")
+        else:
+            st.write("The character's appearance, clothing and core traits will stay consistent across scenes.")
+
+        st.header("🎬 Scene Plan")
+
+        for item in scenes:
 
             with st.expander(
-                f"🎬 {scene.split(':')[0]}",
+                f"🎬 Scene {item['scene']}",
                 expanded=True
             ):
 
-                scene_text = scene.split(":", 1)[1].strip()
-
                 if language == "اردو":
-                    st.write(f"📖 **کہانی:** {scene_text}")
-                    st.write("🎭 **کردار:** Main Character")
-                    st.write("🖼️ **تصویر:** Scene Artwork")
-                    st.write("🎥 **Animation:** Character Movement")
-                    st.write("🗣️ **Dialogue:** Scene Dialogue")
-                    st.write("🔊 **Sound:** Music & Sound Effects")
+
+                    st.write(f"📖 **کہانی:** {item['story']}")
+                    st.write(f"🎭 **Character:** {item['character']}")
+                    st.write(f"🖼️ **Image Prompt:** {item['image_prompt']}")
+                    st.write(f"🎥 **Animation:** {item['animation_prompt']}")
+                    st.write(f"🗣️ **Dialogue:** {item['dialogue']}")
+                    st.write(f"🔊 **Sound/Music:** {item['sound']}")
+
+                    st.button(
+                        f"🖼️ Scene {item['scene']} کی تصویر تیار کریں",
+                        key=f"image_{item['scene']}"
+                    )
 
                 else:
-                    st.write(f"📖 **Story:** {scene_text}")
-                    st.write("🎭 **Character:** Main Character")
-                    st.write("🖼️ **Image:** Scene Artwork")
-                    st.write("🎥 **Animation:** Character Movement")
-                    st.write("🗣️ **Dialogue:** Scene Dialogue")
-                    st.write("🔊 **Sound:** Music & Sound Effects")
 
-        if language == "اردو":
-            st.success("🎉 کہانی Scenes میں تقسیم ہو گئی!")
-        else:
-            st.success("🎉 Story has been divided into scenes!")
+                    st.write(f"📖 **Story:** {item['story']}")
+                    st.write(f"🎭 **Character:** {item['character']}")
+                    st.write(f"🖼️ **Image Prompt:** {item['image_prompt']}")
+                    st.write(f"🎥 **Animation:** {item['animation_prompt']}")
+                    st.write(f"🗣️ **Dialogue:** {item['dialogue']}")
+                    st.write(f"🔊 **Sound/Music:** {item['sound']}")
+
+                    st.button(
+                        f"🖼️ Generate Scene {item['scene']} Image",
+                        key=f"image_{item['scene']}"
+                    )
+
+        st.divider()
+
+        st.header("🚧 AI Generation Pipeline")
+
+        st.write("📝 Story → 🎬 Scenes → 🖼️ Images → 🎥 Animation → 🗣️ Voice → 🎵 Music → ✂️ Editing → 🎞️ MP4")
 
         st.info(
-            "اگلے مرحلے میں ہم Scenes کو حقیقی AI تصاویر سے جوڑیں گے۔"
+            "اگلے مرحلے میں ہم ان Image buttons کو حقیقی مفت/اوپن image-generation system سے جوڑیں گے۔"
             if language == "اردو"
-            else "In the next step, we will connect the scenes to real AI image generation."
-        )
+            else "Next, we will connect these image buttons to a free/open image-generation system."
+                    )
