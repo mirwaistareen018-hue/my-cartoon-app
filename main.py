@@ -1,5 +1,4 @@
 import streamlit as st
-from google import genai
 
 st.set_page_config(
     page_title="AI Cartoon Video Studio",
@@ -14,88 +13,82 @@ language = st.selectbox(
     ["اردو", "English"]
 )
 
-script = st.text_area(
-    "اپنی کہانی لکھیں:",
-    placeholder="مثال: ایک بہادر بلی اپنے کتے دوست کے ساتھ جنگل میں خزانہ تلاش کرنے جاتی ہے۔",
-    height=180
-)
+if language == "اردو":
 
-scene_count = st.slider(
-    "کتنے سینز بنانے ہیں؟",
-    5,
-    20,
-    10
-)
+    st.header("📝 اپنی کہانی لکھیں")
 
-if st.button("🎬 AI Story Director شروع کریں", type="primary"):
+    script = st.text_area(
+        "کہانی:",
+        placeholder="مثال: ایک بہادر بلی اپنے کتے دوست کے ساتھ جادوئی جنگل میں خزانہ تلاش کرنے جاتی ہے۔",
+        height=180
+    )
+
+    scene_count = st.slider(
+        "کتنے سینز؟",
+        5,
+        20,
+        10
+    )
+
+    button_text = "🎬 کارٹون پروجیکٹ بنائیں"
+
+else:
+
+    st.header("📝 Write Your Story")
+
+    script = st.text_area(
+        "Story:",
+        placeholder="Example: A brave cat and his dog friend enter a magical forest to find treasure.",
+        height=180
+    )
+
+    scene_count = st.slider(
+        "Number of Scenes",
+        5,
+        20,
+        10
+    )
+
+    button_text = "🎬 Create Cartoon Project"
+
+
+if st.button(button_text, type="primary"):
 
     if not script.strip():
-        st.warning("پہلے اپنی کہانی لکھیں۔")
-        st.stop()
-
-    try:
-        api_key = st.secrets["GEMINI_API_KEY"]
-
-        client = genai.Client(api_key=api_key)
 
         if language == "اردو":
-            prompt = f"""
-آپ ایک AI Cartoon Story Director ہیں۔
-
-اس کہانی کو {scene_count} سینز میں تقسیم کریں۔
-
-کہانی:
-{script}
-
-ہر سین کے لیے یہ معلومات دیں:
-
-1. Scene number
-2. Scene description
-3. Characters
-4. Character appearance
-5. Action
-6. Dialogue
-7. Background
-8. Sound effects
-
-کرداروں کی شکل، لباس اور بنیادی خصوصیات پوری کہانی میں مستقل رکھیں۔
-
-جواب اردو میں دیں۔
-"""
+            st.warning("پہلے اپنی کہانی لکھیں۔")
         else:
-            prompt = f"""
-You are an AI Cartoon Story Director.
+            st.warning("Please write your story first.")
 
-Divide this story into {scene_count} scenes.
+    else:
 
-Story:
-{script}
+        st.success("✅ پروجیکٹ تیار ہے!")
 
-For every scene provide:
+        st.header("🎭 Character Bible")
 
-1. Scene number
-2. Scene description
-3. Characters
-4. Character appearance
-5. Action
-6. Dialogue
-7. Background
-8. Sound effects
+        if language == "اردو":
+            st.write("مرکزی کردار پوری کہانی میں ایک جیسا رہے گا۔")
+            st.write("لباس، شکل اور بنیادی خصوصیات مستقل رہیں گی۔")
+        else:
+            st.write("The main character will remain consistent.")
+            st.write("Appearance, clothing and core traits will stay consistent.")
 
-Keep character appearance, clothing and core traits consistent across all scenes.
+        st.header("🎬 Scene Plan")
 
-Answer in English.
-"""
+        for i in range(1, scene_count + 1):
 
-        response = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=prompt
+            with st.expander(f"🎬 Scene {i}", expanded=True):
+
+                st.write(f"📖 **Story:** {script}")
+                st.write("🎭 **Character:** Main character")
+                st.write("🖼️ **Image:** Scene artwork")
+                st.write("🎥 **Animation:** Character movement")
+                st.write("🗣️ **Dialogue:** Scene dialogue")
+                st.write("🔊 **Sound:** Music and sound effects")
+
+        st.success("🎉 Scene Plan مکمل ہے!")
+
+        st.info(
+            "اگلے مرحلے میں ہم اس Scene Plan کو حقیقی تصویر، آواز اور ویڈیو generation سے جوڑیں گے۔"
         )
-
-        st.success("🎉 AI Story Director نے کہانی تیار کر دی!")
-
-        st.markdown(response.text)
-
-    except Exception as e:
-        st.error("AI Director چلانے میں مسئلہ آیا۔")
-        st.code(str(e))
