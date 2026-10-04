@@ -1,7 +1,5 @@
 import streamlit as st
 from huggingface_hub import InferenceClient
-from PIL import Image
-import io
 import os
 
 st.set_page_config(
@@ -11,6 +9,7 @@ st.set_page_config(
 )
 
 st.title("🎬 AI Cartoon Video Studio")
+
 
 # ==================================================
 # SESSION STATE
@@ -22,30 +21,42 @@ if "scenes" not in st.session_state:
 if "generated_images" not in st.session_state:
     st.session_state.generated_images = {}
 
-if "video_files" not in st.session_state:
-    st.session_state.video_files = {}
+if "generated_videos" not in st.session_state:
+    st.session_state.generated_videos = {}
 
 if "project_created" not in st.session_state:
     st.session_state.project_created = False
 
 
 # ==================================================
-# HUGGING FACE IMAGE GENERATOR
+# HUGGING FACE CLIENT
 # ==================================================
 
-def generate_image(prompt):
+def get_client():
 
     token = st.secrets.get("HF_TOKEN")
 
     if not token:
+        return None
+
+    return InferenceClient(
+        api_key=token,
+        provider="auto"
+    )
+
+
+# ==================================================
+# AI IMAGE GENERATOR
+# ==================================================
+
+def generate_image(prompt):
+
+    client = get_client()
+
+    if client is None:
         return None, "HF_TOKEN نہیں ملا۔ Streamlit Secrets چیک کریں۔"
 
     try:
-
-        client = InferenceClient(
-            api_key=token,
-            provider="auto"
-        )
 
         image = client.text_to_image(
             prompt=prompt,
@@ -60,39 +71,29 @@ def generate_image(prompt):
 
 
 # ==================================================
-# CREATE SIMPLE ANIMATED VIDEO
+# AI IMAGE TO VIDEO
 # ==================================================
 
-def create_video(image, output_path, duration=5):
+def generate_ai_video(image, motion_prompt):
+
+    client = get_client()
+
+    if client is None:
+        return None, "HF_TOKEN نہیں ملا۔"
 
     try:
 
-        from moviepy import ImageClip
-
-        image_path = output_path.replace(".mp4", ".png")
-
-        image.save(image_path)
-
-        clip = ImageClip(image_path).with_duration(duration)
-
-        clip = clip.resized(height=720)
-
-        clip = clip.with_position("center")
-
-        clip.write_videofile(
-            output_path,
-            fps=24,
-            codec="libx264",
-            audio=False
+        video = client.image_to_video(
+            image=image,
+            prompt=motion_prompt,
+            model="Wan-AI/Wan2.2-I2V-A14B"
         )
 
-        clip.close()
-
-        return True, None
+        return video, None
 
     except Exception as e:
 
-        return False, str(e)
+        return None, str(e)
 
 
 # ==================================================
@@ -149,7 +150,7 @@ else:
 
 
 # ==================================================
-# CREATE SCENE PLAN
+# SCENE PLAN
 # ==================================================
 
 def create_scene_plan(story, count, language):
@@ -161,53 +162,71 @@ def create_scene_plan(story, count, language):
         if language == "اردو":
 
             scenes.append({
+
                 "scene": i,
 
                 "story": f"{story} — حصہ {i}",
 
-                "character": "مرکزی کردار",
+                "character": "پیاری مرغی اور اس کا بچہ",
 
                 "image_prompt": (
-                    f"2D colorful cartoon scene, scene {i}, "
-                    f"cute hen, consistent character design, "
-                    f"cinematic composition, detailed background, "
+                    f"2D colorful children's cartoon, "
+                    f"scene {i}, a cute mother hen and her chick, "
+                    f"consistent character design, "
+                    f"bright colors, detailed farm background, "
+                    f"cinematic composition, "
                     f"based on this story: {story}"
                 ),
 
-                "animation_prompt":
-                    f"Scene {i} میں مرغی کی ہلکی قدرتی حرکت اور camera movement",
+                "motion_prompt": (
+                    "A cute mother hen gently moves her head and body, "
+                    "her little chick walks naturally beside her, "
+                    "the chick looks around curiously, "
+                    "their feathers move slightly in a gentle breeze, "
+                    "grass and leaves move naturally, "
+                    "smooth subtle character motion, "
+                    "slow cinematic camera movement, "
+                    "stable cartoon style, "
+                    "keep the same characters and appearance, "
+                    "no morphing, no deformation, "
+                    "no extra characters."
+                )
 
-                "dialogue":
-                    f"Scene {i} کا مکالمہ",
-
-                "sound":
-                    f"Scene {i} کے لیے background music اور sound effects"
             })
 
         else:
 
             scenes.append({
+
                 "scene": i,
 
                 "story": f"{story} — Part {i}",
 
-                "character": "Main Character",
+                "character": "Cute mother hen and her chick",
 
                 "image_prompt": (
-                    f"2D colorful cartoon scene, scene {i}, "
-                    f"cute hen, consistent character design, "
-                    f"cinematic composition, detailed background, "
+                    f"2D colorful children's cartoon, "
+                    f"scene {i}, a cute mother hen and her chick, "
+                    f"consistent character design, "
+                    f"bright colors, detailed farm background, "
+                    f"cinematic composition, "
                     f"based on this story: {story}"
                 ),
 
-                "animation_prompt":
-                    f"Natural character movement and camera movement for scene {i}",
+                "motion_prompt": (
+                    "A cute mother hen gently moves her head and body, "
+                    "her little chick walks naturally beside her, "
+                    "the chick looks around curiously, "
+                    "their feathers move slightly in a gentle breeze, "
+                    "grass and leaves move naturally, "
+                    "smooth subtle character motion, "
+                    "slow cinematic camera movement, "
+                    "stable cartoon style, "
+                    "keep the same characters and appearance, "
+                    "no morphing, no deformation, "
+                    "no extra characters."
+                )
 
-                "dialogue":
-                    f"Dialogue for scene {i}",
-
-                "sound":
-                    f"Background music and sound effects for scene {i}"
             })
 
     return scenes
@@ -224,7 +243,8 @@ if st.button(button_text, type="primary"):
         st.warning(
             "پہلے اپنی کہانی لکھیں۔"
             if language == "اردو"
-            else "Please write your story first."
+            else
+            "Please write your story first."
         )
 
     else:
@@ -236,7 +256,7 @@ if st.button(button_text, type="primary"):
         )
 
         st.session_state.generated_images = {}
-        st.session_state.video_files = {}
+        st.session_state.generated_videos = {}
         st.session_state.project_created = True
 
 
@@ -249,18 +269,19 @@ if st.session_state.project_created:
     st.success(
         "✅ Cartoon Project تیار ہے!"
         if language == "اردو"
-        else "✅ Cartoon Project created!"
+        else
+        "✅ Cartoon Project created!"
     )
 
     st.header("🎭 Character Bible")
 
     st.write(
-        "مرکزی کردار کی شکل، لباس اور بنیادی خصوصیات "
-        "تمام Scenes میں مستقل رکھی جائیں گی۔"
+        "مرکزی کردار: پیاری مرغی اور اس کا بچہ۔ "
+        "ہم کوشش کریں گے کہ تمام Scenes میں ان کی شکل مستقل رہے۔"
         if language == "اردو"
         else
-        "The character's appearance, clothing and core traits "
-        "will stay consistent across scenes."
+        "Main characters: a cute mother hen and her chick. "
+        "We will try to keep their appearance consistent across scenes."
     )
 
     st.header("🎬 Scene Plan")
@@ -286,8 +307,13 @@ if st.session_state.project_created:
                 f"🖼️ **Image Prompt:** {item['image_prompt']}"
             )
 
+            st.write(
+                f"🎥 **Motion Prompt:** {item['motion_prompt']}"
+            )
+
+
             # ==========================================
-            # IMAGE
+            # EXISTING IMAGE
             # ==========================================
 
             if scene_number in st.session_state.generated_images:
@@ -297,20 +323,18 @@ if st.session_state.project_created:
                     caption=f"Scene {scene_number}"
                 )
 
+
             # ==========================================
             # GENERATE IMAGE
             # ==========================================
 
             if st.button(
-                f"🖼️ Generate Scene {scene_number} Image",
-                key=f"generate_image_{scene_number}"
+                f"🖼️ Scene {scene_number} کی تصویر بنائیں",
+                key=f"image_{scene_number}"
             ):
 
                 with st.spinner(
                     "🎨 AI تصویر بنا رہا ہے..."
-                    if language == "اردو"
-                    else
-                    "🎨 Generating AI image..."
                 ):
 
                     image, error = generate_image(
@@ -323,79 +347,135 @@ if st.session_state.project_created:
                         scene_number
                     ] = image
 
+                    st.success("✅ تصویر تیار ہے!")
+
                     st.rerun()
 
                 else:
 
                     st.error(
-                        f"❌ Image generation error: {error}"
+                        f"❌ Image Error: {error}"
                     )
 
+
             # ==========================================
-            # CREATE VIDEO
+            # AI MOTION VIDEO
             # ==========================================
 
             if scene_number in st.session_state.generated_images:
 
                 if st.button(
-                    f"🎥 Scene {scene_number} کو Video بنائیں",
-                    key=f"video_{scene_number}"
+                    f"🤖 Scene {scene_number} کو AI Motion Video بنائیں",
+                    key=f"motion_{scene_number}"
                 ):
 
-                    os.makedirs("videos", exist_ok=True)
-
-                    output_path = (
-                        f"videos/scene_{scene_number}.mp4"
-                    )
-
                     with st.spinner(
-                        "🎥 تصویر سے ویڈیو بن رہی ہے..."
+                        "🤖 AI مرغی اور بچے کو حرکت دے رہا ہے..."
                     ):
 
-                        success, error = create_video(
+                        video, error = generate_ai_video(
                             st.session_state.generated_images[
                                 scene_number
                             ],
-                            output_path
+                            item["motion_prompt"]
                         )
 
-                    if success:
+                    if video is not None:
 
-                        st.session_state.video_files[
-                            scene_number
-                        ] = output_path
-
-                        st.success(
-                            "✅ Scene کی MP4 ویڈیو تیار ہے!"
+                        os.makedirs(
+                            "videos",
+                            exist_ok=True
                         )
+
+                        video_path = (
+                            f"videos/scene_{scene_number}_ai.mp4"
+                        )
+
+                        try:
+
+                            if isinstance(video, bytes):
+
+                                video_bytes = video
+
+                            elif hasattr(video, "read"):
+
+                                video_bytes = video.read()
+
+                            else:
+
+                                video_bytes = bytes(video)
+
+                            with open(
+                                video_path,
+                                "wb"
+                            ) as f:
+
+                                f.write(video_bytes)
+
+                            st.session_state.generated_videos[
+                                scene_number
+                            ] = video_path
+
+                            st.success(
+                                "🎉 AI Motion Video تیار ہو گئی!"
+                            )
+
+                        except Exception as save_error:
+
+                            st.error(
+                                f"❌ Video Save Error: {save_error}"
+                            )
 
                     else:
 
                         st.error(
-                            f"❌ Video error: {error}"
+                            f"❌ AI Video Error: {error}"
                         )
 
+
             # ==========================================
-            # SHOW VIDEO
+            # SHOW AI VIDEO
             # ==========================================
 
-            if scene_number in st.session_state.video_files:
+            if scene_number in st.session_state.generated_videos:
 
-                video_path = st.session_state.video_files[
-                    scene_number
-                ]
+                video_path = (
+                    st.session_state.generated_videos[
+                        scene_number
+                    ]
+                )
 
                 st.video(video_path)
 
-                with open(video_path, "rb") as video_file:
+                with open(
+                    video_path,
+                    "rb"
+                ) as video_file:
 
                     st.download_button(
-                        "⬇️ MP4 Download کریں",
+                        "⬇️ AI Video Download کریں",
                         video_file,
-                        file_name=f"scene_{scene_number}.mp4",
+                        file_name=(
+                            f"scene_{scene_number}_ai.mp4"
+                        ),
                         mime="video/mp4",
-                        key=f"download_{scene_number}"
+                        key=f"download_ai_{scene_number}"
                     )
+
+
+# ==================================================
+# PIPELINE
+# ==================================================
+
+st.divider()
+
+st.header("🚧 AI Generation Pipeline")
+
+st.write(
+    "📝 Story → 🎬 Scenes → 🖼️ AI Images → "
+    "🤖 AI Motion → 🗣️ Voice → 👄 Lip Sync → "
+    "🎵 Music → ✂️ Editing → 🎞️ Final MP4"
+    )               )
 
 
 # ==================================================
