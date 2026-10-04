@@ -1,4 +1,5 @@
 import streamlit as st
+from google import genai
 
 st.set_page_config(
     page_title="AI Cartoon Video Studio",
@@ -13,72 +14,88 @@ language = st.selectbox(
     ["اردو", "English"]
 )
 
-if language == "اردو":
+script = st.text_area(
+    "اپنی کہانی لکھیں:",
+    placeholder="مثال: ایک بہادر بلی اپنے کتے دوست کے ساتھ جنگل میں خزانہ تلاش کرنے جاتی ہے۔",
+    height=180
+)
 
-    script = st.text_area(
-        "اپنی کہانی لکھیں:",
-        placeholder="مثال: ایک بلی اور اس کا کتا دوست جنگل میں خزانہ تلاش کرنے جاتے ہیں۔",
-        height=180
-    )
+scene_count = st.slider(
+    "کتنے سینز بنانے ہیں؟",
+    5,
+    20,
+    10
+)
 
-    scene_count = st.slider(
-        "کتنے سینز بنانے ہیں؟",
-        5, 20, 10
-    )
-
-    button_text = "🎬 کہانی تیار کریں"
-
-else:
-
-    script = st.text_area(
-        "Write your story:",
-        placeholder="Example: A cat and his dog friend go into a forest to find treasure.",
-        height=180
-    )
-
-    scene_count = st.slider(
-        "Number of scenes",
-        5, 20, 10
-    )
-
-    button_text = "🎬 Create Story"
-
-
-if st.button(button_text, type="primary"):
+if st.button("🎬 AI Story Director شروع کریں", type="primary"):
 
     if not script.strip():
-
         st.warning("پہلے اپنی کہانی لکھیں۔")
+        st.stop()
 
-    else:
+    try:
+        api_key = st.secrets["GEMINI_API_KEY"]
 
-        st.success("کہانی موصول ہوگئی! 🎉")
+        client = genai.Client(api_key=api_key)
 
-        st.header("🎭 Character Bible")
+        if language == "اردو":
+            prompt = f"""
+آپ ایک AI Cartoon Story Director ہیں۔
 
-        st.write("👤 مرکزی کردار پوری کہانی میں ایک جیسا رہے گا۔")
-        st.write("🎨 کردار کی شکل، لباس اور بنیادی خصوصیات برقرار رہیں گی۔")
+اس کہانی کو {scene_count} سینز میں تقسیم کریں۔
 
-        st.header("🎬 Scene Plan")
+کہانی:
+{script}
 
-        for i in range(1, scene_count + 1):
+ہر سین کے لیے یہ معلومات دیں:
 
-            with st.expander(f"🎬 Scene {i}", expanded=True):
+1. Scene number
+2. Scene description
+3. Characters
+4. Character appearance
+5. Action
+6. Dialogue
+7. Background
+8. Sound effects
 
-                st.write(f"📖 **کہانی:** {script}")
+کرداروں کی شکل، لباس اور بنیادی خصوصیات پوری کہانی میں مستقل رکھیں۔
 
-                st.write("🎭 **کردار:** مرکزی کردار")
+جواب اردو میں دیں۔
+"""
+        else:
+            prompt = f"""
+You are an AI Cartoon Story Director.
 
-                st.write("🖼️ **تصویر:** اس سین کا ماحول اور کردار")
+Divide this story into {scene_count} scenes.
 
-                st.write("🎥 **ایکشن:** کردار اس سین میں حرکت کرے گا")
+Story:
+{script}
 
-                st.write("🗣️ **ڈائیلاگ:** اس سین کی گفتگو")
+For every scene provide:
 
-                st.write("🔊 **آواز:** موسیقی اور sound effects")
+1. Scene number
+2. Scene description
+3. Characters
+4. Character appearance
+5. Action
+6. Dialogue
+7. Background
+8. Sound effects
 
-        st.success("✅ Scene plan تیار ہے!")
+Keep character appearance, clothing and core traits consistent across all scenes.
 
-        st.info(
-            "اگلے مرحلے میں ہم اسی Scene Plan کو حقیقی AI generation سے جوڑیں گے۔"
+Answer in English.
+"""
+
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
         )
+
+        st.success("🎉 AI Story Director نے کہانی تیار کر دی!")
+
+        st.markdown(response.text)
+
+    except Exception as e:
+        st.error("AI Director چلانے میں مسئلہ آیا۔")
+        st.code(str(e))
