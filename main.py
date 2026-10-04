@@ -7,99 +7,78 @@ st.set_page_config(
 )
 
 st.title("🎬 AI Cartoon Video Studio")
-st.write("Script → Story → Scenes → Cartoon Video")
 
 language = st.selectbox(
-    "Language / زبان",
-    ["English", "اردو"]
+    "زبان / Language",
+    ["اردو", "English"]
 )
 
-if language == "English":
-
-    st.header("📝 Your Story")
-
-    script = st.text_area(
-        "Write your story:",
-        placeholder="Example: A brave cat and his dog friend enter a magical forest to find a treasure.",
-        height=180
-    )
-
-    scene_count = st.slider(
-        "Number of Scenes",
-        5,
-        20,
-        10
-    )
-
-    start_text = "🎬 Create My Cartoon"
-
-else:
-
-    st.header("📝 اپنی کہانی")
+if language == "اردو":
 
     script = st.text_area(
         "اپنی کہانی لکھیں:",
-        placeholder="مثال: ایک بہادر بلی اپنے کتے دوست کے ساتھ جادوئی جنگل میں خزانہ تلاش کرنے جاتی ہے۔",
+        placeholder="مثال: ایک بلی اور اس کا کتا دوست جنگل میں خزانہ تلاش کرنے جاتے ہیں۔",
         height=180
     )
 
     scene_count = st.slider(
-        "سینز کی تعداد",
-        5,
-        20,
-        10
+        "کتنے سینز بنانے ہیں؟",
+        5, 20, 10
     )
 
-    start_text = "🎬 میری کارٹون ویڈیو بنائیں"
+    button_text = "🎬 کہانی تیار کریں"
+
+else:
+
+    script = st.text_area(
+        "Write your story:",
+        placeholder="Example: A cat and his dog friend go into a forest to find treasure.",
+        height=180
+    )
+
+    scene_count = st.slider(
+        "Number of scenes",
+        5, 20, 10
+    )
+
+    button_text = "🎬 Create Story"
 
 
-if st.button(start_text, type="primary"):
+if st.button(button_text, type="primary"):
 
     if not script.strip():
 
-        if language == "English":
-            st.warning("Please write your story first.")
-        else:
-            st.warning("پہلے اپنی کہانی لکھیں۔")
+        st.warning("پہلے اپنی کہانی لکھیں۔")
 
     else:
 
-        if language == "English":
-            st.success("Story received! AI Director is preparing the scenes... 🎬")
-        else:
-            st.success("کہانی مل گئی! AI ڈائریکٹر سینز تیار کر رہا ہے... 🎬")
+        st.success("کہانی موصول ہوگئی! 🎉")
 
-        st.subheader("🎭 Character Bible")
+        st.header("🎭 Character Bible")
 
-        if language == "English":
-            st.write("Main character: Consistent appearance throughout the story.")
-        else:
-            st.write("مرکزی کردار: پوری کہانی میں کردار کی شکل ایک جیسی رہے گی۔")
+        st.write("👤 مرکزی کردار پوری کہانی میں ایک جیسا رہے گا۔")
+        st.write("🎨 کردار کی شکل، لباس اور بنیادی خصوصیات برقرار رہیں گی۔")
 
-        st.subheader("🎬 Scene Plan")
+        st.header("🎬 Scene Plan")
 
         for i in range(1, scene_count + 1):
 
             with st.expander(f"🎬 Scene {i}", expanded=True):
 
-                if language == "English":
+                st.write(f"📖 **کہانی:** {script}")
 
-                    st.write(f"📖 **Story:** {script}")
-                    st.write("🎭 **Character:** Same character design")
-                    st.write("🖼️ **Image:** Scene artwork")
-                    st.write("🎥 **Animation:** Character movement")
-                    st.write("🗣️ **Dialogue:** Character dialogue")
-                    st.write("🔊 **Sound:** Music + sound effects")
+                st.write("🎭 **کردار:** مرکزی کردار")
 
-                else:
+                st.write("🖼️ **تصویر:** اس سین کا ماحول اور کردار")
 
-                    st.write(f"📖 **کہانی:** {script}")
-                    st.write("🎭 **کردار:** ایک جیسا character design")
-                    st.write("🖼️ **تصویر:** سین کی تصویر")
-                    st.write("🎥 **اینیمیشن:** کردار کی حرکت")
-                    st.write("🗣️ **ڈائیلاگ:** کردار کی گفتگو")
-                    st.write("🔊 **آواز:** موسیقی + sound effects")
+                st.write("🎥 **ایکشن:** کردار اس سین میں حرکت کرے گا")
+
+                st.write("🗣️ **ڈائیلاگ:** اس سین کی گفتگو")
+
+                st.write("🔊 **آواز:** موسیقی اور sound effects")
+
+        st.success("✅ Scene plan تیار ہے!")
 
         st.info(
-            "🚧 AI image, animation, voice and MP4 generation will be connected in the next steps."
-                    )
+            "اگلے مرحلے میں ہم اسی Scene Plan کو حقیقی AI generation سے جوڑیں گے۔"
+        )
