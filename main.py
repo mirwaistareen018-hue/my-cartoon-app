@@ -14,7 +14,6 @@ language = st.selectbox(
 )
 
 if language == "اردو":
-
     st.header("📝 اپنی کہانی لکھیں")
 
     script = st.text_area(
@@ -24,16 +23,15 @@ if language == "اردو":
     )
 
     scene_count = st.slider(
-        "کتنے سینز؟",
+        "کتنے Scenes؟",
         5,
         20,
         10
     )
 
-    button_text = "🎬 کارٹون پروجیکٹ بنائیں"
+    button_text = "🎬 Cartoon Project بنائیں"
 
 else:
-
     st.header("📝 Write Your Story")
 
     script = st.text_area(
@@ -52,6 +50,33 @@ else:
     button_text = "🎬 Create Cartoon Project"
 
 
+def make_scenes(story, count, language):
+    sentences = [
+        s.strip()
+        for s in story.replace("۔", ".").split(".")
+        if s.strip()
+    ]
+
+    if not sentences:
+        sentences = [story.strip()]
+
+    scenes = []
+
+    for i in range(count):
+        part = sentences[i % len(sentences)]
+
+        if language == "اردو":
+            scenes.append(
+                f"Scene {i + 1}: {part}"
+            )
+        else:
+            scenes.append(
+                f"Scene {i + 1}: {part}"
+            )
+
+    return scenes
+
+
 if st.button(button_text, type="primary"):
 
     if not script.strip():
@@ -63,32 +88,57 @@ if st.button(button_text, type="primary"):
 
     else:
 
-        st.success("✅ پروجیکٹ تیار ہے!")
+        st.success("✅ Cartoon Project تیار ہے!")
 
         st.header("🎭 Character Bible")
 
         if language == "اردو":
             st.write("مرکزی کردار پوری کہانی میں ایک جیسا رہے گا۔")
-            st.write("لباس، شکل اور بنیادی خصوصیات مستقل رہیں گی۔")
+            st.write("شکل، لباس اور بنیادی خصوصیات مستقل رہیں گی۔")
         else:
-            st.write("The main character will remain consistent.")
+            st.write("The main character will remain consistent throughout the story.")
             st.write("Appearance, clothing and core traits will stay consistent.")
 
         st.header("🎬 Scene Plan")
 
-        for i in range(1, scene_count + 1):
+        scenes = make_scenes(
+            script,
+            scene_count,
+            language
+        )
 
-            with st.expander(f"🎬 Scene {i}", expanded=True):
+        for scene in scenes:
 
-                st.write(f"📖 **Story:** {script}")
-                st.write("🎭 **Character:** Main character")
-                st.write("🖼️ **Image:** Scene artwork")
-                st.write("🎥 **Animation:** Character movement")
-                st.write("🗣️ **Dialogue:** Scene dialogue")
-                st.write("🔊 **Sound:** Music and sound effects")
+            with st.expander(
+                f"🎬 {scene.split(':')[0]}",
+                expanded=True
+            ):
 
-        st.success("🎉 Scene Plan مکمل ہے!")
+                scene_text = scene.split(":", 1)[1].strip()
+
+                if language == "اردو":
+                    st.write(f"📖 **کہانی:** {scene_text}")
+                    st.write("🎭 **کردار:** Main Character")
+                    st.write("🖼️ **تصویر:** Scene Artwork")
+                    st.write("🎥 **Animation:** Character Movement")
+                    st.write("🗣️ **Dialogue:** Scene Dialogue")
+                    st.write("🔊 **Sound:** Music & Sound Effects")
+
+                else:
+                    st.write(f"📖 **Story:** {scene_text}")
+                    st.write("🎭 **Character:** Main Character")
+                    st.write("🖼️ **Image:** Scene Artwork")
+                    st.write("🎥 **Animation:** Character Movement")
+                    st.write("🗣️ **Dialogue:** Scene Dialogue")
+                    st.write("🔊 **Sound:** Music & Sound Effects")
+
+        if language == "اردو":
+            st.success("🎉 کہانی Scenes میں تقسیم ہو گئی!")
+        else:
+            st.success("🎉 Story has been divided into scenes!")
 
         st.info(
-            "اگلے مرحلے میں ہم اس Scene Plan کو حقیقی تصویر، آواز اور ویڈیو generation سے جوڑیں گے۔"
+            "اگلے مرحلے میں ہم Scenes کو حقیقی AI تصاویر سے جوڑیں گے۔"
+            if language == "اردو"
+            else "In the next step, we will connect the scenes to real AI image generation."
         )
