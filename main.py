@@ -2,57 +2,88 @@ import streamlit as st
 
 st.set_page_config(
     page_title="My AI Cartoon Videos",
-    page_icon="🎬"
+    page_icon="🎬",
+    layout="wide"
 )
 
-st.title("🎬 My AI Cartoon Videos")
-st.write("اپنے کردار کے نام سے مکمل Cartoon Script بنائیں")
-
-character = st.text_input(
-    "اپنے کردار کا نام لکھیں:",
-    placeholder="مثلاً: آلو، کتا، شیر"
+language = st.selectbox(
+    "Language / زبان",
+    ["English", "اردو"]
 )
 
-story_idea = st.text_area(
-    "کہانی کا خیال لکھیں:",
-    placeholder="مثلاً: اپنے دوست کے ساتھ ایک دلچسپ سفر"
-)
+if language == "English":
+    st.title("🎬 My AI Cartoon Video Studio")
+    st.write("Script → AI Director → Scenes")
 
-if st.button("✨ مکمل کہانی بنائیں", type="primary"):
+    script = st.text_area(
+        "Write your story or script:",
+        placeholder="Example: A cat goes into a forest with its friend to find a treasure.",
+        height=150
+    )
 
-    if not character.strip():
-        st.warning("پہلے کردار کا نام لکھیں۔")
+    scene_count = st.slider(
+        "Number of Scenes",
+        min_value=5,
+        max_value=20,
+        value=10
+    )
 
-    elif not story_idea.strip():
-        st.warning("پہلے کہانی کا خیال لکھیں۔")
+    button_text = "🎬 Start AI Director"
+
+else:
+    st.title("🎬 میری AI کارٹون ویڈیو اسٹوڈیو")
+    st.write("اسکرپٹ → AI ڈائریکٹر → سینز")
+
+    script = st.text_area(
+        "اپنی کہانی یا اسکرپٹ لکھیں:",
+        placeholder="مثال: ایک بلی اپنے دوست کے ساتھ جنگل میں خزانہ تلاش کرنے جاتی ہے۔",
+        height=150
+    )
+
+    scene_count = st.slider(
+        "سینز کی تعداد",
+        min_value=5,
+        max_value=20,
+        value=10
+    )
+
+    button_text = "🎬 AI ڈائریکٹر شروع کریں"
+
+
+if st.button(button_text, type="primary"):
+
+    if not script.strip():
+
+        if language == "English":
+            st.warning("Please write your story first.")
+        else:
+            st.warning("پہلے اپنی کہانی لکھیں۔")
 
     else:
 
-        scenes = [
-            f"{character} ایک خوبصورت صبح اٹھتا ہے۔",
-            f"{character} کو ایک دلچسپ مسئلہ نظر آتا ہے۔",
-            f"{character} اس مسئلے کا حل تلاش کرنے نکلتا ہے۔",
-            f"راستے میں {character} اپنے ایک دوست سے ملتا ہے۔",
-            f"{character} اور اس کا دوست مل کر ایک منصوبہ بناتے ہیں۔",
-            f"ان کا پہلا منصوبہ ناکام ہو جاتا ہے، لیکن {character} ہمت نہیں ہارتا۔",
-            f"{character} دوبارہ کوشش کرتا ہے اور ایک نیا راستہ تلاش کرتا ہے۔",
-            f"{character} آخرکار مسئلے کا حل تلاش کر لیتا ہے۔",
-            f"{character} اور اس کے دوست بہت خوش ہوتے ہیں۔",
-            f"{character} سیکھتا ہے کہ ہمت اور کوشش کبھی ضائع نہیں جاتی۔"
-        ]
+        if language == "English":
+            st.success("AI Director created the scenes! ✅")
+        else:
+            st.success("AI ڈائریکٹر نے سینز تیار کر دیے! ✅")
 
-        st.success(f"🎬 {character} کی مکمل کہانی تیار ہے!")
+        for i in range(1, scene_count + 1):
 
-        for i, scene in enumerate(scenes, 1):
-            st.subheader(f"Scene {i}")
-            st.write(scene)
+            st.subheader(f"🎬 Scene {i}")
 
-        st.divider()
+            if language == "English":
+                st.write(f"📖 Story: {script}")
+                st.write("🎭 Character: The main character stays consistent.")
+                st.write("🖼️ Image: Scene environment, character and action.")
+                st.write("🎥 Animation: Character movement and scene animation.")
+                st.write("🗣️ Dialogue: Character dialogue for this scene.")
+                st.write("🔊 Sound: Music and sound effects.")
 
-        st.subheader("📜 مکمل اسکرپٹ")
+            else:
+                st.write(f"📖 کہانی: {script}")
+                st.write("🎭 کردار: مرکزی کردار ایک جیسا رہے گا۔")
+                st.write("🖼️ تصویر: اس سین کا ماحول، کردار اور ایکشن۔")
+                st.write("🎥 اینیمیشن: کردار کی حرکت اور سین کی animation۔")
+                st.write("🗣️ ڈائیلاگ: اس سین میں کردار کی گفتگو۔")
+                st.write("🔊 آواز: موسیقی اور sound effects۔")
 
-        full_script = "\n\n".join(
-            [f"Scene {i}: {scene}" for i, scene in enumerate(scenes, 1)]
-        )
-
-        st.write(full_script)
+            st.divider()
