@@ -1,7 +1,5 @@
-streamlit
-huggingface_hub
-Pillow
-numpy
-moviepy
-imageio-ffmpeg
+gradio
 edge-tts
+requests
+deep-translator
+moviepy>=2
