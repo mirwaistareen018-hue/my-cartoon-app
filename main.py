@@ -59,9 +59,21 @@ def normalize_scene(scene, number):
     if not isinstance(scene, dict):
         scene = {}
 
-    text = str(scene.get("text", "") or "")
+    try:
+        scene_number = int(
+            scene.get("number", number) or number
+        )
+    except (TypeError, ValueError):
+        scene_number = number
 
-    chars = scene.get("characters", [])
+    text = str(
+        scene.get("text", "") or ""
+    )
+
+    chars = scene.get(
+        "characters",
+        [],
+    )
 
     if not isinstance(chars, list):
         chars = []
@@ -73,9 +85,7 @@ def normalize_scene(scene, number):
     ]
 
     return {
-        "number": int(
-            scene.get("number", number) or number
-        ),
+        "number": scene_number,
         "text": text,
         "action": str(
             scene.get("action", "")
@@ -94,8 +104,7 @@ def load_state():
         return fresh_state()
 
     try:
-        with open(
-            STATE,
+        with STATE.open(
             "r",
             encoding="utf-8",
         ) as file:
@@ -106,17 +115,32 @@ def load_state():
         if isinstance(data, dict):
             result.update(data)
 
-        scenes = result.get("scenes", [])
+        scenes = result.get(
+            "scenes",
+            [],
+        )
 
-        if not isinstance(scenes, list):
+        if not isinstance(
+            scenes,
+            list,
+        ):
             scenes = []
 
         result["scenes"] = [
-            normalize_scene(scene, i)
-            for i, scene in enumerate(scenes, 1)
+            normalize_scene(
+                scene,
+                i,
+            )
+            for i, scene in enumerate(
+                scenes,
+                1,
+            )
         ]
 
-        for key in ("images", "videos"):
+        for key in (
+            "images",
+            "videos",
+        ):
             if not isinstance(
                 result.get(key),
                 dict,
@@ -135,10 +159,11 @@ def save_state(data):
         exist_ok=True,
     )
 
-    tmp = STATE.with_suffix(".tmp")
+    tmp = STATE.with_suffix(
+        ".tmp"
+    )
 
-    with open(
-        tmp,
+    with tmp.open(
         "w",
         encoding="utf-8",
     ) as file:
@@ -156,7 +181,7 @@ state = load_state()
 
 
 # ============================================================
-# TEXT / STORY FUNCTIONS
+# STORY HELPERS
 # ============================================================
 
 def clean(text):
@@ -265,15 +290,28 @@ def detect_action(text):
 
     rules = [
         (
-            ["fly", "flies", "flying", "اڑ"],
+            [
+                "fly",
+                "flies",
+                "flying",
+                "اڑ",
+            ],
             "flies naturally through the environment",
         ),
         (
-            ["walk", "walking", "چل"],
+            [
+                "walk",
+                "walking",
+                "چل",
+            ],
             "walks naturally with body movement",
         ),
         (
-            ["run", "running", "دوڑ"],
+            [
+                "run",
+                "running",
+                "دوڑ",
+            ],
             "runs naturally through the scene",
         ),
         (
@@ -343,16 +381,19 @@ def detect_action(text):
 
 
 def make_scenes(story):
-    chars = find_characters(story)
+    chars = find_characters(
+        story
+    )
+
     scenes = []
 
-    story_parts = split_story(story)
-
     for number, text in enumerate(
-        story_parts,
+        split_story(story),
         1,
     ):
-        act = detect_action(text)
+        act = detect_action(
+            text
+        )
 
         char_text = (
             ", ".join(chars)
@@ -400,15 +441,15 @@ def make_scenes(story):
 
 def get_token():
     try:
-        secret_token = st.secrets.get(
+        token = st.secrets.get(
             "HF_TOKEN",
             "",
         )
     except Exception:
-        secret_token = ""
+        token = ""
 
     return (
-        secret_token
+        token
         or os.environ.get(
             "HF_TOKEN",
             "",
@@ -421,7 +462,8 @@ def generate_image(scene):
         return (
             None,
             "huggingface_hub is not installed. "
-            "Install it with: pip install huggingface_hub",
+            "Install it with: "
+            "pip install huggingface_hub",
         )
 
     token = get_token()
@@ -429,8 +471,8 @@ def generate_image(scene):
     if not token:
         return (
             None,
-            "HF_TOKEN is missing from Streamlit Secrets "
-            "or environment variables.",
+            "HF_TOKEN is missing from "
+            "Streamlit Secrets or environment variables.",
         )
 
     try:
@@ -451,7 +493,10 @@ def generate_image(scene):
         )
 
         number = int(
-            scene.get("number", 1)
+            scene.get(
+                "number",
+                1,
+            )
             or 1
         )
 
@@ -462,10 +507,16 @@ def generate_image(scene):
 
         image.save(output)
 
-        return str(output), None
+        return (
+            str(output),
+            None,
+        )
 
     except Exception as exc:
-        return None, str(exc)
+        return (
+            None,
+            str(exc),
+        )
 
 
 # ============================================================
@@ -486,16 +537,22 @@ def generate_motion(
         return (
             None,
             "gradio_client is not installed. "
-            "Install it with: pip install gradio_client",
+            "Install it with: "
+            "pip install gradio_client",
         )
 
     temp_path = None
 
     try:
         if not image_path:
-            return None, "Image path is empty."
+            return (
+                None,
+                "Image path is empty.",
+            )
 
-        if not Path(image_path).exists():
+        if not Path(
+            image_path
+        ).exists():
             return (
                 None,
                 f"Image file not found: {image_path}",
@@ -568,7 +625,10 @@ def generate_motion(
             )
 
         number = int(
-            scene.get("number", 1)
+            scene.get(
+                "number",
+                1,
+            )
             or 1
         )
 
@@ -581,7 +641,9 @@ def generate_motion(
             generated,
             str,
         ):
-            generated_path = Path(generated)
+            generated_path = Path(
+                generated
+            )
 
             if not generated_path.exists():
                 return (
@@ -594,7 +656,10 @@ def generate_motion(
                 output,
             )
 
-            return str(output), None
+            return (
+                str(output),
+                None,
+            )
 
         if isinstance(
             generated,
@@ -605,21 +670,21 @@ def generate_motion(
                 or generated.get("video")
             )
 
-            if possible_path:
-                possible_path = Path(
+            if (
+                possible_path
+                and Path(
                     str(possible_path)
+                ).exists()
+            ):
+                shutil.copyfile(
+                    str(possible_path),
+                    output,
                 )
 
-                if possible_path.exists():
-                    shutil.copyfile(
-                        possible_path,
-                        output,
-                    )
-
-                    return (
-                        str(output),
-                        None,
-                    )
+                return (
+                    str(output),
+                    None,
+                )
 
         return (
             None,
@@ -627,13 +692,16 @@ def generate_motion(
         )
 
     except Exception as exc:
-        return None, str(exc)
+        return (
+            None,
+            str(exc),
+        )
 
     finally:
         if temp_path:
             try:
                 os.remove(temp_path)
-            except Exception:
+            except OSError:
                 pass
 
 
@@ -654,7 +722,10 @@ def make_music(
     count = seconds * rate
 
     time_axis = (
-        np.arange(count, dtype=np.float32)
+        np.arange(
+            count,
+            dtype=np.float32,
+        )
         / rate
     )
 
@@ -698,14 +769,15 @@ def make_music(
         )
     )
 
-    fade = min(
-        2.0,
-        seconds / 2,
-    )
-
     fade_count = max(
         1,
-        int(fade * rate),
+        int(
+            min(
+                2.0,
+                seconds / 2,
+            )
+            * rate
+        ),
     )
 
     envelope = np.ones(
@@ -713,13 +785,17 @@ def make_music(
         dtype=np.float32,
     )
 
-    envelope[:fade_count] = np.linspace(
+    envelope[
+        :fade_count
+    ] = np.linspace(
         0,
         1,
         fade_count,
     )
 
-    envelope[-fade_count:] = np.linspace(
+    envelope[
+        -fade_count:
+    ] = np.linspace(
         1,
         0,
         fade_count,
@@ -814,21 +890,21 @@ def video_paths():
     ):
         return result
 
-    def sort_key(item):
-        key = str(item)
-
+    def sort_key(key):
         parts = re.findall(
             r"\d+",
-            key,
+            str(key),
         )
 
         if parts:
-            return [
+            return tuple(
                 int(x)
                 for x in parts
-            ]
+            )
 
-        return [999999, key]
+        return (
+            999999,
+        )
 
     for key in sorted(
         videos,
@@ -861,7 +937,9 @@ def video_duration(paths):
         clip = None
 
         try:
-            clip = VideoFileClip(path)
+            clip = VideoFileClip(
+                path
+            )
 
             total += float(
                 clip.duration
@@ -931,10 +1009,6 @@ def join_videos(
             method="compose",
         )
 
-        # ----------------------------------------------------
-        # Add background music if available
-        # ----------------------------------------------------
-
         if (
             music_path
             and AudioFileClip is not None
@@ -945,58 +1019,16 @@ def join_videos(
                     music_path
                 )
 
-                # Make music duration match video duration.
                 if (
                     music.duration
                     and final.duration
-                    and music.duration > final.duration
+                    and music.duration
+                    > final.duration
                 ):
-                    music = music.subclipped(
-                        0,
-                        final.duration,
-                    )
-
-                final = final.with_audio(
-                    music
-                )
-
-            except Exception:
-                # If audio fails, continue with video.
-                pass
-
-        final.write_videofile(
-            str(output),
-            codec="libx264",
-            audio_codec="aac",
-            logger=None,
-        )
-
-        return (
-            str(output),
-            None,
-        )
-
-    except Exception as exc:
-        return (
-            None,
-            str(exc),
-        )
-
-    finally:
-        if final:
-            try:
-                final.close()
-            except Exception:
-                pass
-
-        if music:
-            try:
-                music.close()
-            except Exception:
-                pass
-
-        for clip in clips:
-            try:
-                clip.close()
-            except Exception:
-      
+                    try:
+                        music = music.subclipped(
+                            0,
+                            final.duration,
+                        )
+                    except AttributeError:
+        
