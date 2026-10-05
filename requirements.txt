@@ -1,5 +1,5 @@
-streamlit
-huggingface_hub
-moviepy
-gradio_client
-numpy
+image
+prompt
+frames
+negative_prompt
+guidance
