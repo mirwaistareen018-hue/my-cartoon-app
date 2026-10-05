@@ -1,6 +1,6 @@
 import os
-import re
 import json
+import math
 import shutil
 import tempfile
 import wave
@@ -15,23 +15,16 @@ except Exception:
     InferenceClient = None
 
 
-# ============================================================
-# APP DIRECTORIES
-# ============================================================
+APP_DIR = Path("cartoon_project")
+IMAGE_DIR = APP_DIR / "images"
+VIDEO_DIR = APP_DIR / "videos"
+MUSIC_DIR = APP_DIR / "music"
+STATE_FILE = APP_DIR / "state.json"
 
-APP = Path("cartoon_project")
-IMAGES = APP / "images"
-VIDEOS = APP / "videos"
-MUSIC = APP / "music"
-STATE = APP / "state.json"
 
-for folder in (APP, IMAGES, VIDEOS, MUSIC):
+for folder in (IMAGE_DIR, VIDEO_DIR, MUSIC_DIR):
     folder.mkdir(parents=True, exist_ok=True)
 
-
-# ============================================================
-# STREAMLIT CONFIG
-# ============================================================
 
 st.set_page_config(
     page_title="AI Cartoon Movie Studio",
@@ -39,12 +32,11 @@ st.set_page_config(
     layout="wide",
 )
 
+st.title("🎬 AI Cartoon Movie Studio")
+st.caption("Story → Scenes → Images → Motion → Music → Movie")
 
-# ============================================================
-# STATE
-# ============================================================
 
-def fresh_state():
+def default_state():
     return {
         "story": "",
         "scenes": [],
@@ -55,514 +47,155 @@ def fresh_state():
     }
 
 
-def normalize_scene(scene, number):
-    if not isinstance(scene, dict):
-        scene = {}
-
-    try:
-        scene_number = int(
-            scene.get("number", number) or number
-        )
-    except (TypeError, ValueError):
-        scene_number = number
-
-    text = str(
-        scene.get("text", "") or ""
-    )
-
-    chars = scene.get(
-        "characters",
-        [],
-    )
-
-    if not isinstance(chars, list):
-        chars = []
-
-    chars = [
-        str(x)
-        for x in chars
-        if str(x).strip()
-    ]
-
-    return {
-        "number": scene_number,
-        "text": text,
-        "action": str(
-            scene.get("action", "")
-            or "natural character movement and cinematic environmental motion"
-        ),
-        "characters": chars,
-        "prompt": str(
-            scene.get("prompt", "")
-            or text
-        ),
-    }
-
-
 def load_state():
-    if not STATE.exists():
-        return fresh_state()
+    if not STATE_FILE.exists():
+        return default_state()
 
     try:
-        with STATE.open(
-            "r",
-            encoding="utf-8",
-        ) as file:
-            data = json.load(file)
+        with open(STATE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
 
-        result = fresh_state()
-
-        if isinstance(data, dict):
-            result.update(data)
-
-        scenes = result.get(
-            "scenes",
-            [],
-        )
-
-        if not isinstance(
-            scenes,
-            list,
-        ):
-            scenes = []
-
-        result["scenes"] = [
-            normalize_scene(
-                scene,
-                i,
-            )
-            for i, scene in enumerate(
-                scenes,
-                1,
-            )
-        ]
-
-        for key in (
-            "images",
-            "videos",
-        ):
-            if not isinstance(
-                result.get(key),
-                dict,
-            ):
-                result[key] = {}
-
-        return result
+        state = default_state()
+        state.update(data)
+        return state
 
     except Exception:
-        return fresh_state()
+        return default_state()
 
 
-def save_state(data):
-    APP.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+def save_state(state):
+    APP_DIR.mkdir(parents=True, exist_ok=True)
 
-    tmp = STATE.with_suffix(
-        ".tmp"
-    )
+    tmp = STATE_FILE.with_suffix(".tmp")
 
-    with tmp.open(
-        "w",
-        encoding="utf-8",
-    ) as file:
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(
-            data,
-            file,
+            state,
+            f,
             ensure_ascii=False,
             indent=2,
         )
 
-    tmp.replace(STATE)
-
-
-state = load_state()
-
-
-# ============================================================
-# STORY HELPERS
-# ============================================================
-
-def clean(text):
-    return re.sub(
-        r"\s+",
-        " ",
-        str(text).strip(),
-    )
+    tmp.replace(STATE_FILE)
 
 
 def split_story(text):
-    text = clean(text)
+    text = " ".join(text.strip().split())
 
     if not text:
         return []
 
-    parts = [
-        p.strip()
-        for p in re.split(
-            r"(?<=[.!?۔؟])\s+",
-            text,
-        )
-        if p.strip()
-    ]
+    parts = []
+    current = ""
 
-    if len(parts) > 1:
-        result = []
+    for word in text.split():
+        current = (current + " " + word).strip()
 
-        for part in parts:
-            words = part.split()
+        if len(current.split()) >= 35:
+            parts.append(current)
+            current = ""
 
-            if len(words) <= 24:
-                result.append(part)
-            else:
-                result.extend(
-                    " ".join(
-                        words[i:i + 24]
-                    )
-                    for i in range(
-                        0,
-                        len(words),
-                        24,
-                    )
-                )
+    if current:
+        parts.append(current)
 
-        return result
-
-    words = text.split()
-    size = 18
-
-    return [
-        " ".join(
-            words[i:i + size]
-        )
-        for i in range(
-            0,
-            len(words),
-            size,
-        )
-    ]
-
-
-def find_characters(text):
-    names = []
-
-    common = [
-        "crow",
-        "fox",
-        "lion",
-        "rabbit",
-        "cat",
-        "dog",
-        "bird",
-        "mouse",
-        "farmer",
-        "boy",
-        "girl",
-        "king",
-        "queen",
-        "کوا",
-        "لومڑی",
-        "شیر",
-        "خرگوش",
-        "بلی",
-        "کتا",
-        "پرندہ",
-        "کسان",
-        "لڑکا",
-        "لڑکی",
-        "بادشاہ",
-        "ملکہ",
-    ]
-
-    low = text.lower()
-
-    for item in common:
-        if item.lower() in low:
-            if item not in names:
-                names.append(item)
-
-    return names
+    return parts
 
 
 def detect_action(text):
     low = text.lower()
 
-    rules = [
-        (
-            [
-                "fly",
-                "flies",
-                "flying",
-                "اڑ",
-            ],
-            "flies naturally through the environment",
-        ),
-        (
-            [
-                "walk",
-                "walking",
-                "چل",
-            ],
-            "walks naturally with body movement",
-        ),
-        (
-            [
-                "run",
-                "running",
-                "دوڑ",
-            ],
-            "runs naturally through the scene",
-        ),
-        (
-            [
-                "drink",
-                "drinks",
-                "پانی پیتا",
-                "پیتا",
-            ],
-            "moves to water and drinks naturally",
-        ),
-        (
-            [
-                "look",
-                "looks",
-                "دیکھ",
-            ],
-            "looks around and reacts naturally",
-        ),
-        (
-            [
-                "pick",
-                "picks",
-                "اٹھا",
-            ],
-            "reaches forward and picks up the object",
-        ),
-        (
-            [
-                "drop",
-                "drops",
-                "ڈال",
-            ],
-            "moves the object and drops it naturally",
-        ),
-        (
-            [
-                "happy",
-                "smile",
-                "خوش",
-                "مسکرات",
-            ],
-            "becomes happy and reacts cheerfully",
-        ),
-        (
-            [
-                "sleep",
-                "sleeps",
-                "سو",
-            ],
-            "rests with gentle natural movement",
-        ),
-    ]
+    if any(x in low for x in ["fly", "flies", "flying", "اڑ"]):
+        return "The character flies naturally through the scene."
 
-    for words, result in rules:
-        if any(
-            word in low
-            for word in words
-        ):
-            return result
+    if any(x in low for x in ["walk", "walking", "چل"]):
+        return "The character walks naturally through the scene."
 
-    return (
-        "natural character movement, "
-        "expressive reaction, and "
-        "cinematic environmental motion"
-    )
+    if any(x in low for x in ["run", "running", "دوڑ"]):
+        return "The character runs naturally through the scene."
+
+    if any(x in low for x in ["drink", "drinks", "پیتا"]):
+        return "The character moves to the water and drinks naturally."
+
+    if any(x in low for x in ["look", "looks", "دیکھ"]):
+        return "The character looks around and reacts naturally."
+
+    return "Natural character movement and cinematic environmental motion."
 
 
 def make_scenes(story):
-    chars = find_characters(
-        story
-    )
+    chunks = split_story(story)
 
-    scenes = []
-
-    for number, text in enumerate(
-        split_story(story),
-        1,
-    ):
-        act = detect_action(
-            text
-        )
-
-        char_text = (
-            ", ".join(chars)
-            if chars
-            else "main cartoon characters"
-        )
-
-        prompt = (
-            "High quality 3D family-friendly "
-            "cartoon movie frame. "
-            "Characters: "
-            + char_text
-            + ". "
-            "Story moment: "
-            + text
-            + ". "
-            "Action: "
-            + act
-            + ". "
-            "Consistent character appearance, "
-            "cinematic composition, "
-            "colorful lighting, "
-            "detailed environment."
-        )
-
-        scenes.append(
-            normalize_scene(
-                {
-                    "number": number,
-                    "text": text,
-                    "action": act,
-                    "characters": list(chars),
-                    "prompt": prompt,
-                },
-                number,
-            )
-        )
-
-    return scenes
+    return [
+        {
+            "number": i,
+            "text": text,
+            "action": detect_action(text),
+        }
+        for i, text in enumerate(chunks, 1)
+    ]
 
 
-# ============================================================
-# HUGGING FACE
-# ============================================================
-
-def get_token():
-    try:
-        token = st.secrets.get(
-            "HF_TOKEN",
-            "",
-        )
-    except Exception:
-        token = ""
-
-    return (
-        token
-        or os.environ.get(
-            "HF_TOKEN",
-            "",
-        )
+def hf_token():
+    return st.secrets.get(
+        "HF_TOKEN",
+        os.environ.get("HF_TOKEN", ""),
     )
 
 
-def generate_image(scene):
+def generate_image(prompt, number):
     if InferenceClient is None:
-        return (
-            None,
-            "huggingface_hub is not installed. "
-            "Install it with: "
-            "pip install huggingface_hub",
-        )
+        return None, "huggingface_hub is not installed."
 
-    token = get_token()
+    token = hf_token()
 
     if not token:
-        return (
-            None,
-            "HF_TOKEN is missing from "
-            "Streamlit Secrets or environment variables.",
-        )
+        return None, "HF_TOKEN is missing from Streamlit Secrets."
 
     try:
         client = InferenceClient(
             provider="auto",
-            api_key=token,
-        )
-
-        prompt = str(
-            scene.get("prompt")
-            or scene.get("text")
-            or "A family friendly cartoon scene"
+            token=token,
         )
 
         image = client.text_to_image(
-            prompt,
+            "High quality 3D cartoon movie frame, family friendly, "
+            "cinematic lighting, colorful environment, consistent character. "
+            + prompt,
             model="black-forest-labs/FLUX.1-schnell",
         )
 
-        number = int(
-            scene.get(
-                "number",
-                1,
-            )
-            or 1
-        )
-
-        output = (
-            IMAGES
-            / f"scene_{number}.png"
-        )
+        output = IMAGE_DIR / f"scene_{number}.png"
 
         image.save(output)
 
-        return (
-            str(output),
-            None,
-        )
+        return str(output), None
 
     except Exception as exc:
-        return (
-            None,
-            str(exc),
-        )
+        return None, str(exc)
 
 
-# ============================================================
-# AI MOTION
-# ============================================================
-
-def generate_motion(
+def create_ai_video(
     image_path,
-    scene,
+    motion_prompt,
+    number,
     clip_number,
 ):
     try:
-        from gradio_client import (
-            Client,
-            handle_file,
-        )
+        from gradio_client import Client, handle_file
     except Exception:
-        return (
-            None,
-            "gradio_client is not installed. "
-            "Install it with: "
-            "pip install gradio_client",
-        )
+        return None, "gradio_client is not installed."
+
+    if not image_path or not Path(image_path).exists():
+        return None, f"Input image was not found: {image_path}"
 
     temp_path = None
 
     try:
-        if not image_path:
-            return (
-                None,
-                "Image path is empty.",
-            )
-
-        if not Path(
-            image_path
-        ).exists():
-            return (
-                None,
-                f"Image file not found: {image_path}",
-            )
-
         with tempfile.NamedTemporaryFile(
             suffix=".png",
             delete=False,
-        ) as temp:
-            temp_path = temp.name
+        ) as tmp:
+            temp_path = tmp.name
 
         shutil.copyfile(
             image_path,
@@ -574,26 +207,17 @@ def generate_motion(
             max_workers=1,
         )
 
-        action = str(
-            scene.get("action")
-            or "natural character movement and cinematic motion"
-        )
-
         prompt = (
-            action
-            + ", smooth natural movement, "
-            + "natural body movement, "
-            + "natural environmental movement, "
-            + "cinematic camera movement, "
+            motion_prompt
+            + ", smooth natural movement, natural body movement, "
+            + "natural environmental movement, cinematic camera movement, "
             + "stable character appearance"
         )
 
         negative = (
-            "static image, frozen frame, blurry, "
-            "distorted, deformed character, "
-            "extra limbs, flickering, "
-            "unstable face, warped body, "
-            "bad anatomy"
+            "static image, frozen image, blurry, distorted, "
+            "deformed character, extra limbs, flickering, "
+            "unstable face, warped body, bad anatomy"
         )
 
         result = client.predict(
@@ -611,131 +235,75 @@ def generate_motion(
 
         generated = (
             result[0]
-            if isinstance(
-                result,
-                (list, tuple),
-            )
+            if isinstance(result, (list, tuple))
             else result
         )
 
         if not generated:
-            return (
-                None,
-                "AI video service returned no file.",
-            )
+            return None, "AI video service returned no video."
 
-        number = int(
-            scene.get(
-                "number",
-                1,
-            )
-            or 1
-        )
-
-        output = (
-            VIDEOS
-            / f"scene_{number}_clip_{clip_number}.mp4"
-        )
-
-        if isinstance(
-            generated,
-            str,
-        ):
-            generated_path = Path(
-                generated
-            )
-
-            if not generated_path.exists():
-                return (
-                    None,
-                    "Generated video file was not found.",
-                )
-
-            shutil.copyfile(
-                generated_path,
-                output,
-            )
-
-            return (
-                str(output),
-                None,
-            )
-
-        if isinstance(
-            generated,
-            dict,
-        ):
-            possible_path = (
+        if isinstance(generated, dict):
+            generated = (
                 generated.get("path")
-                or generated.get("video")
+                or generated.get("url")
+                or generated.get("name")
             )
 
-            if (
-                possible_path
-                and Path(
-                    str(possible_path)
-                ).exists()
-            ):
+        output = VIDEO_DIR / (
+            f"scene_{number}_clip_{clip_number}.mp4"
+        )
+
+        if isinstance(generated, str):
+            source = Path(generated)
+
+            if source.exists():
                 shutil.copyfile(
-                    str(possible_path),
+                    source,
                     output,
                 )
 
-                return (
-                    str(output),
-                    None,
-                )
+                return str(output), None
 
-        return (
-            None,
-            "AI video response format was not recognized.",
+            return None, (
+                f"Generated video file was not found: {generated}"
+            )
+
+        return None, (
+            "AI video response format was not recognized."
         )
 
     except Exception as exc:
-        return (
-            None,
-            str(exc),
-        )
+        return None, str(exc)
 
     finally:
         if temp_path:
             try:
                 os.remove(temp_path)
-            except OSError:
+            except Exception:
                 pass
 
 
-# ============================================================
-# MUSIC
-# ============================================================
-
-def make_music(
-    seconds,
-    style,
-):
-    seconds = max(
+def create_music(duration_seconds, style):
+    duration = max(
         5,
-        int(seconds),
+        int(duration_seconds),
     )
 
     rate = 22050
-    count = seconds * rate
+    total = duration * rate
 
-    time_axis = (
-        np.arange(
-            count,
-            dtype=np.float32,
-        )
+    t = (
+        np.arange(total, dtype=np.float32)
         / rate
     )
 
     frequencies = {
         "Happy / Cheerful": 261.63,
         "Cute / Sweet": 329.63,
-        "Farm / Nature": 220.00,
-        "Magical / Fantasy": 392.00,
-        "Funny Cartoon": 294.00,
-        "Peaceful": 196.00,
+        "Farm / Nature": 220.0,
+        "Magical / Fantasy": 392.0,
+        "Funny Cartoon": 294.0,
+        "Peaceful": 196.0,
         "Cinematic": 146.83,
     }
 
@@ -745,74 +313,47 @@ def make_music(
     )
 
     signal = (
-        np.sin(
-            2
-            * np.pi
-            * freq
-            * time_axis
+        np.sin(2 * np.pi * freq * t)
+        + 0.5 * np.sin(
+            2 * np.pi * freq * 1.5 * t
         )
-        + 0.45
-        * np.sin(
-            2
-            * np.pi
-            * freq
-            * 1.5
-            * time_axis
-        )
-        + 0.20
-        * np.sin(
-            2
-            * np.pi
-            * freq
-            * 2
-            * time_axis
+        + 0.25 * np.sin(
+            2 * np.pi * freq * 2 * t
         )
     )
 
-    fade_count = max(
-        1,
-        int(
-            min(
-                2.0,
-                seconds / 2,
-            )
-            * rate
-        ),
+    fade = min(
+        2.0,
+        duration / 2,
     )
 
     envelope = np.ones(
-        count,
+        total,
         dtype=np.float32,
     )
 
-    envelope[
-        :fade_count
-    ] = np.linspace(
-        0,
-        1,
-        fade_count,
-    )
+    n = int(fade * rate)
 
-    envelope[
-        -fade_count:
-    ] = np.linspace(
-        1,
-        0,
-        fade_count,
-    )
+    if n > 0:
+        envelope[:n] = np.linspace(
+            0,
+            1,
+            n,
+        )
+
+        envelope[-n:] = np.linspace(
+            1,
+            0,
+            n,
+        )
 
     audio = np.clip(
-        signal
-        * envelope
-        * 0.12,
+        signal * envelope * 0.12,
         -1,
         1,
     )
 
-    output = (
-        MUSIC
-        / "background_music.wav"
-    )
+    output = MUSIC_DIR / "background_music.wav"
 
     pcm = (
         audio * 32767
@@ -821,214 +362,4 @@ def make_music(
     with wave.open(
         str(output),
         "wb",
-    ) as wav:
-        wav.setnchannels(1)
-        wav.setsampwidth(2)
-        wav.setframerate(rate)
-        wav.writeframes(
-            pcm.tobytes()
-        )
-
-    return str(output)
-
-
-# ============================================================
-# MOVIEPY
-# ============================================================
-
-def moviepy_modules():
-    try:
-        from moviepy import (
-            VideoFileClip,
-            AudioFileClip,
-            concatenate_videoclips,
-        )
-
-        return (
-            VideoFileClip,
-            AudioFileClip,
-            concatenate_videoclips,
-        )
-
-    except Exception:
-        try:
-            from moviepy.editor import (
-                VideoFileClip,
-                AudioFileClip,
-                concatenate_videoclips,
-            )
-
-            return (
-                VideoFileClip,
-                AudioFileClip,
-                concatenate_videoclips,
-            )
-
-        except Exception:
-            return (
-                None,
-                None,
-                None,
-            )
-
-
-# ============================================================
-# VIDEO HELPERS
-# ============================================================
-
-def video_paths():
-    result = []
-
-    videos = state.get(
-        "videos",
-        {},
-    )
-
-    if not isinstance(
-        videos,
-        dict,
-    ):
-        return result
-
-    def sort_key(key):
-        parts = re.findall(
-            r"\d+",
-            str(key),
-        )
-
-        if parts:
-            return tuple(
-                int(x)
-                for x in parts
-            )
-
-        return (
-            999999,
-        )
-
-    for key in sorted(
-        videos,
-        key=sort_key,
-    ):
-        path = videos.get(key)
-
-        if (
-            path
-            and Path(path).exists()
-        ):
-            result.append(path)
-
-    return result
-
-
-def video_duration(paths):
-    (
-        VideoFileClip,
-        _,
-        _,
-    ) = moviepy_modules()
-
-    if VideoFileClip is None:
-        return 0.0
-
-    total = 0.0
-
-    for path in paths:
-        clip = None
-
-        try:
-            clip = VideoFileClip(
-                path
-            )
-
-            total += float(
-                clip.duration
-                or 0
-            )
-
-        except Exception:
-            pass
-
-        finally:
-            if clip:
-                try:
-                    clip.close()
-                except Exception:
-                    pass
-
-    return total
-
-
-def join_videos(
-    paths,
-    music_path=None,
-):
-    (
-        VideoFileClip,
-        AudioFileClip,
-        concatenate,
-    ) = moviepy_modules()
-
-    if (
-        VideoFileClip is None
-        or concatenate is None
-    ):
-        return (
-            None,
-            "MoviePy is not available. "
-            "Install it with: pip install moviepy",
-        )
-
-    clips = []
-    final = None
-    music = None
-
-    try:
-        for path in paths:
-            if (
-                path
-                and Path(path).exists()
-            ):
-                clips.append(
-                    VideoFileClip(path)
-                )
-
-        if not clips:
-            return (
-                None,
-                "No video clips are available.",
-            )
-
-        output = (
-            APP
-            / "final_cartoon_movie.mp4"
-        )
-
-        final = concatenate(
-            clips,
-            method="compose",
-        )
-
-        if (
-            music_path
-            and AudioFileClip is not None
-            and Path(music_path).exists()
-        ):
-            try:
-                music = AudioFileClip(
-                    music_path
-                )
-
-                if (
-                    music.duration
-                    and final.duration
-                    and music.duration
-                    > final.duration
-                ):
-                    try:
-                        music = music.subclipped(
-                            0,
-                            final.duration,
-                        )
-                    except AttributeError:
-        
+           
