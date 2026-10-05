@@ -6,42 +6,36 @@ import tempfile
 import math
 import wave
 
-
-# =========================================================
-# PAGE
-# =========================================================
-
 st.set_page_config(
-    page_title="AI Cartoon Video Studio",
+    page_title="AI Cartoon Movie Studio",
     page_icon="🎬",
     layout="wide"
 )
-
-st.title("🎬 AI Cartoon Video Studio")
-
 
 # =========================================================
 # SESSION STATE
 # =========================================================
 
-if "scenes" not in st.session_state:
-    st.session_state.scenes = []
+DEFAULTS = {
+    "scenes": [],
+    "generated_images": {},
+    "video_files": {},
+    "final_videos": {},
+    "project_created": False,
+}
 
-if "generated_images" not in st.session_state:
-    st.session_state.generated_images = {}
-
-if "video_files" not in st.session_state:
-    st.session_state.video_files = {}
-
-if "final_videos" not in st.session_state:
-    st.session_state.final_videos = {}
-
-if "project_created" not in st.session_state:
-    st.session_state.project_created = False
+for key, value in DEFAULTS.items():
+    if key not in st.session_state:
+        if isinstance(value, dict):
+            st.session_state[key] = {}
+        elif isinstance(value, list):
+            st.session_state[key] = []
+        else:
+            st.session_state[key] = value
 
 
 # =========================================================
-# IMAGE GENERATION
+# AI IMAGE GENERATION
 # =========================================================
 
 def generate_image(prompt):
@@ -49,7 +43,7 @@ def generate_image(prompt):
     token = st.secrets.get("HF_TOKEN")
 
     if not token:
-        return None, "HF_TOKEN نہیں ملا۔ Streamlit Secrets چیک کریں۔"
+        return None, "HF_TOKEN نہیں ملا۔ Streamlit Secrets میں HF_TOKEN چیک کریں۔"
 
     try:
 
@@ -65,32 +59,40 @@ def generate_image(prompt):
 
         return image, None
 
-    except Exception as e:
+    except Exception as exc:
 
-        return None, str(e)
+        return None, str(exc)
 
 
 # =========================================================
 # AI IMAGE TO VIDEO
 # =========================================================
 
-def create_ai_video(image, motion_prompt, scene_number):
+def create_ai_video(
+    image,
+    motion_prompt,
+    scene_number,
+    clip_number=1
+):
 
     try:
 
         from gradio_client import Client, handle_file
 
-        os.makedirs("videos", exist_ok=True)
+        os.makedirs(
+            "videos",
+            exist_ok=True
+        )
 
-        temp_file = tempfile.NamedTemporaryFile(
+        temp = tempfile.NamedTemporaryFile(
             suffix=".png",
             delete=False
         )
 
-        temp_image_path = temp_file.name
-        temp_file.close()
+        temp_path = temp.name
+        temp.close()
 
-        image.save(temp_image_path)
+        image.save(temp_path)
 
         client = Client(
             "zerogpu-aoti/wan2-2-fp8da-aoti-faster"
@@ -100,22 +102,20 @@ def create_ai_video(image, motion_prompt, scene_number):
             motion_prompt
             + ", smooth natural movement, "
             + "natural body movement, "
-            + "natural head movement, "
-            + "gentle environmental movement, "
+            + "natural environmental movement, "
             + "cinematic camera movement, "
             + "stable character appearance"
         )
 
         negative_prompt = (
-            "static image, frozen frame, "
-            + "no movement, blurry, distorted, "
-            + "deformed character, extra limbs, "
-            + "flickering, unstable face, "
+            "static image, frozen frame, no movement, "
+            + "blurry, distorted, deformed character, "
+            + "extra limbs, flickering, unstable face, "
             + "warped body, bad anatomy"
         )
 
         result = client.predict(
-            handle_file(temp_image_path),
+            handle_file(temp_path),
             prompt,
             6,
             negative_prompt,
@@ -128,38 +128,42 @@ def create_ai_video(image, motion_prompt, scene_number):
         )
 
         if isinstance(result, (list, tuple)):
-            generated_video = result[0]
+            generated = result[0]
         else:
-            generated_video = result
+            generated = result
 
-        if not generated_video:
+        if not generated:
             return None, "AI نے video file واپس نہیں کی۔"
 
-        video_path = (
-            f"videos/scene_{scene_number}_ai.mp4"
+        output = (
+            f"videos/scene_{scene_number}"
+            f"_clip_{clip_number}.mp4"
         )
 
-        if isinstance(generated_video, str):
+        if isinstance(generated, str):
 
             shutil.copyfile(
-                generated_video,
-                video_path
+                generated,
+                output
             )
 
         else:
 
-            return None, "AI video response سمجھ نہیں آیا۔"
+            return None, (
+                "AI video response کا format "
+                "سمجھ نہیں آیا۔"
+            )
 
         try:
-            os.remove(temp_image_path)
+            os.remove(temp_path)
         except Exception:
             pass
 
-        return video_path, None
+        return output, None
 
-    except Exception as e:
+    except Exception as exc:
 
-        return None, str(e)
+        return None, str(exc)
 
 
 # =========================================================
@@ -174,53 +178,54 @@ def create_background_music(
 ):
 
     sample_rate = 22050
-    total_samples = int(duration * sample_rate)
+
+    total_samples = max(
+        1,
+        int(duration * sample_rate)
+    )
 
     music_styles = {
 
-        "😊 Happy / Cheerful": {
-            "notes": [261.63, 329.63, 392.00, 523.25],
-            "tempo": 0.28
-        },
+        "😊 Happy / Cheerful": (
+            [261.63, 329.63, 392.00, 523.25],
+            0.28
+        ),
 
-        "🌸 Cute / Sweet": {
-            "notes": [261.63, 293.66, 329.63, 392.00],
-            "tempo": 0.38
-        },
+        "🌸 Cute / Sweet": (
+            [261.63, 293.66, 329.63, 392.00],
+            0.38
+        ),
 
-        "🌾 Farm / Nature": {
-            "notes": [220.00, 261.63, 329.63, 392.00],
-            "tempo": 0.55
-        },
+        "🌾 Farm / Nature": (
+            [220.00, 261.63, 329.63, 392.00],
+            0.55
+        ),
 
-        "✨ Magical / Fantasy": {
-            "notes": [261.63, 349.23, 440.00, 523.25],
-            "tempo": 0.48
-        },
+        "✨ Magical / Fantasy": (
+            [261.63, 349.23, 440.00, 523.25],
+            0.48
+        ),
 
-        "😂 Funny Cartoon": {
-            "notes": [293.66, 369.99, 440.00, 587.33],
-            "tempo": 0.22
-        },
+        "😂 Funny Cartoon": (
+            [293.66, 369.99, 440.00, 587.33],
+            0.22
+        ),
 
-        "😌 Peaceful": {
-            "notes": [220.00, 261.63, 329.63, 392.00],
-            "tempo": 0.75
-        },
+        "😌 Peaceful": (
+            [220.00, 261.63, 329.63, 392.00],
+            0.75
+        ),
 
-        "🎬 Cinematic": {
-            "notes": [196.00, 246.94, 293.66, 392.00],
-            "tempo": 0.65
-        }
+        "🎬 Cinematic": (
+            [196.00, 246.94, 293.66, 392.00],
+            0.65
+        )
     }
 
-    selected = music_styles.get(
+    notes, tempo = music_styles.get(
         style,
         music_styles["😊 Happy / Cheerful"]
     )
-
-    notes = selected["notes"]
-    tempo = selected["tempo"]
 
     frames = []
 
@@ -228,22 +233,36 @@ def create_background_music(
 
         current_time = i / sample_rate
 
-        note_index = int(
-            current_time / tempo
-        ) % len(notes)
+        note_index = (
+            int(current_time / tempo)
+            % len(notes)
+        )
 
         frequency = notes[note_index]
 
         melody = math.sin(
-            2 * math.pi * frequency * current_time
+            2 * math.pi
+            * frequency
+            * current_time
         )
 
-        harmonic = 0.30 * math.sin(
-            2 * math.pi * frequency * 2 * current_time
+        harmony = (
+            0.30
+            * math.sin(
+                2 * math.pi
+                * frequency
+                * 2
+                * current_time
+            )
         )
 
-        bass = 0.12 * math.sin(
-            2 * math.pi * (frequency / 2) * current_time
+        bass = (
+            0.12
+            * math.sin(
+                2 * math.pi
+                * (frequency / 2)
+                * current_time
+            )
         )
 
         fade_in = min(
@@ -251,11 +270,16 @@ def create_background_music(
             current_time / 0.8
         )
 
-        remaining = duration - current_time
+        remaining = (
+            duration - current_time
+        )
 
         fade_out = min(
             1.0,
-            remaining / 1.2
+            max(
+                0.0,
+                remaining / 1.2
+            )
         )
 
         envelope = min(
@@ -265,15 +289,22 @@ def create_background_music(
 
         sample = (
             melody
-            + harmonic
+            + harmony
             + bass
         )
 
-        sample = sample * volume * envelope
+        sample = (
+            sample
+            * volume
+            * envelope
+        )
 
         sample = max(
             -1.0,
-            min(1.0, sample)
+            min(
+                1.0,
+                sample
+            )
         )
 
         integer_sample = int(
@@ -341,7 +372,9 @@ def add_music_to_video(
             f"scene_{scene_number}_final.mp4"
         )
 
-        video = VideoFileClip(video_path)
+        video = VideoFileClip(
+            video_path
+        )
 
         duration = video.duration
 
@@ -352,9 +385,13 @@ def add_music_to_video(
             volume
         )
 
-        audio = AudioFileClip(music_path)
+        audio = AudioFileClip(
+            music_path
+        )
 
-        final_video = video.with_audio(audio)
+        final_video = video.with_audio(
+            audio
+        )
 
         final_video.write_videofile(
             final_path,
@@ -370,82 +407,192 @@ def add_music_to_video(
 
         return final_path, None
 
-    except Exception as e:
+    except Exception as exc:
 
-        return None, str(e)
+        return None, str(exc)
 
 
 # =========================================================
-# LANGUAGE
+# STORY PLAN
 # =========================================================
+
+def create_scene_plan(
+    story,
+    count,
+    language
+):
+
+    scenes = []
+
+    for i in range(
+        1,
+        count + 1
+    ):
+
+        if language == "اردو":
+
+            story_text = (
+                f"{story} — حصہ {i}"
+            )
+
+            character = (
+                "کہانی کے اصل کردار"
+            )
+
+            image_prompt = (
+                "2D colorful children's cartoon, "
+                "friendly expressive characters, "
+                "consistent character design, "
+                "beautiful cinematic environment, "
+                "child-friendly animation style, "
+                f"story: {story}, "
+                f"scene {i}"
+            )
+
+            animation_prompt = (
+                "Characters perform the story action "
+                "naturally; walking, stopping, looking, "
+                "turning, interacting with the environment "
+                "when appropriate; gentle cinematic "
+                "camera movement."
+            )
+
+        else:
+
+            story_text = (
+                f"{story} — Part {i}"
+            )
+
+            character = (
+                "Main story characters"
+            )
+
+            image_prompt = (
+                "2D colorful children's cartoon, "
+                "friendly expressive characters, "
+                "consistent character design, "
+                "beautiful cinematic environment, "
+                "child-friendly animation style, "
+                f"story: {story}, "
+                f"scene {i}"
+            )
+
+            animation_prompt = (
+                "Characters perform the story action "
+                "naturally; walking, stopping, looking, "
+                "turning, interacting with the environment "
+                "when appropriate; gentle cinematic "
+                "camera movement."
+            )
+
+        scenes.append({
+            "scene": i,
+            "story": story_text,
+            "character": character,
+            "image_prompt": image_prompt,
+            "animation_prompt": animation_prompt
+        })
+
+    return scenes
+
+
+# =========================================================
+# MAIN UI
+# =========================================================
+
+st.title(
+    "🎬 AI Cartoon Movie Studio"
+)
 
 language = st.selectbox(
     "زبان / Language",
-    ["اردو", "English"]
+    [
+        "اردو",
+        "English"
+    ]
 )
 
 
 # =========================================================
-# STORY INPUT
+# STORY
 # =========================================================
 
 if language == "اردو":
 
-    st.header("📝 اپنی کہانی لکھیں")
+    st.header(
+        "📝 اپنی مکمل کہانی لکھیں"
+    )
 
     script = st.text_area(
-        "کہانی:",
+        "کہانی یہاں paste کریں:",
         placeholder=(
-            "مثال: ایک پیاری مرغی "
-            "اپنے بچوں کے ساتھ کھیت میں جاتی ہے۔"
+            "مثال: ایک دفعہ ایک جنگل میں "
+            "ایک پیاسا کوا رہتا تھا..."
         ),
-        height=180
-    )
-
-    scene_count = st.slider(
-        "کتنے Scenes؟",
-        1,
-        10,
-        5
-    )
-
-    create_button_text = (
-        "🎬 Cartoon Project بنائیں"
+        height=220
     )
 
 else:
 
-    st.header("📝 Write Your Story")
+    st.header(
+        "📝 Write Your Complete Story"
+    )
 
     script = st.text_area(
-        "Story:",
+        "Paste your story here:",
         placeholder=(
-            "Example: A cute hen goes "
-            "to the farm with her chicks."
+            "Example: Once there was "
+            "a thirsty crow in a forest..."
         ),
-        height=180
+        height=220
     )
 
-    scene_count = st.slider(
-        "Number of Scenes",
-        1,
-        10,
+
+# =========================================================
+# DURATION
+# =========================================================
+
+st.header(
+    "⏱️ Video Duration"
+)
+
+duration_minutes = st.selectbox(
+    "Cartoon movie کتنی لمبی ہو؟",
+    [
+        2,
+        3,
+        4,
         5
-    )
+    ],
+    index=0
+)
 
-    create_button_text = (
-        "🎬 Create Cartoon Project"
-    )
+duration_seconds = (
+    duration_minutes * 60
+)
+
+scene_count = (
+    duration_minutes * 4
+)
+
+st.info(
+    f"🎬 منتخب duration: "
+    f"{duration_minutes} منٹ "
+    f"({duration_seconds} سیکنڈ) | "
+    f"تقریباً {scene_count} story scenes"
+)
 
 
 # =========================================================
-# MUSIC SETTINGS
+# MUSIC
 # =========================================================
 
-st.header("🎵 Background Music")
+st.header(
+    "🎵 Background Music"
+)
 
 music_style = st.selectbox(
-    "Music کی قسم منتخب کریں:",
+    "اپنی music style منتخب کریں:",
     [
         "😊 Happy / Cheerful",
         "🌸 Cute / Sweet",
@@ -458,97 +605,35 @@ music_style = st.selectbox(
 )
 
 music_volume = st.slider(
-    "🎵 Music Volume",
+    "Music Volume",
     0.05,
     0.40,
     0.18,
     0.01
 )
 
-st.info(
-    "🎵 صرف background instrumental music ہوگا۔ "
-    "کوئی انسان کی آواز یا dialogue نہیں ہوگا۔"
+st.caption(
+    "🎵 یہ instrumental background music ہے؛ "
+    "اس میں human singing نہیں ہے۔"
 )
-
-
-# =========================================================
-# SCENE PLANNER
-# =========================================================
-
-def create_scene_plan(
-    story,
-    count,
-    language
-):
-
-    scenes = []
-
-    for i in range(1, count + 1):
-
-        if language == "اردو":
-
-            scenes.append({
-                "scene": i,
-                "story": f"{story} — حصہ {i}",
-                "character": "پیاری مرغی اور اس کا چھوٹا بچہ",
-
-                "image_prompt": (
-                    "2D colorful children's cartoon, "
-                    "cute mother hen and her little chick, "
-                    "bright green farm environment, "
-                    "consistent character design, "
-                    "friendly expressions, "
-                    "cinematic composition, "
-                    f"story: {story}, "
-                    f"scene {i}"
-                ),
-
-                "animation_prompt": (
-                    "The mother hen gently moves "
-                    "her head and body, "
-                    "the little chick walks naturally, "
-                    "their feathers move gently, "
-                    "grass and plants move in the breeze, "
-                    "clouds move slowly, "
-                    "gentle cinematic camera movement"
-                )
-            })
-
-        else:
-
-            scenes.append({
-                "scene": i,
-                "story": f"{story} — Part {i}",
-                "character": "Cute mother hen and her little chick",
-
-                "image_prompt": (
-                    "2D colorful children's cartoon, "
-                    "cute mother hen and her little chick, "
-                    "bright green farm environment, "
-                    "consistent character design, "
-                    "friendly expressions, "
-                    "cinematic composition, "
-                    f"story: {story}, "
-                    f"scene {i}"
-                ),
-
-                "animation_prompt": (
-                    "The mother hen gently moves "
-                    "her head and body, "
-                    "the little chick walks naturally, "
-                    "their feathers move gently, "
-                    "grass and plants move in the breeze, "
-                    "clouds move slowly, "
-                    "gentle cinematic camera movement"
-                )
-            })
-
-    return scenes
 
 
 # =========================================================
 # CREATE PROJECT
 # =========================================================
+
+if language == "اردو":
+
+    create_button_text = (
+        "🎬 Cartoon Movie Project بنائیں"
+    )
+
+else:
+
+    create_button_text = (
+        "🎬 Create Cartoon Movie Project"
+    )
+
 
 if st.button(
     create_button_text,
@@ -558,24 +643,27 @@ if st.button(
     if not script.strip():
 
         st.warning(
-            "پہلے اپنی کہانی لکھیں۔"
+            "پہلے مکمل کہانی paste کریں۔"
         )
 
     else:
 
-        st.session_state.scenes = create_scene_plan(
-            script,
-            scene_count,
-            language
+        st.session_state.scenes = (
+            create_scene_plan(
+                script,
+                scene_count,
+                language
+            )
         )
 
         st.session_state.generated_images = {}
         st.session_state.video_files = {}
         st.session_state.final_videos = {}
+
         st.session_state.project_created = True
 
         st.success(
-            "✅ Cartoon Project تیار ہے!"
+            "✅ Story کو movie scenes میں تقسیم کر دیا گیا ہے!"
         )
 
 
@@ -585,15 +673,11 @@ if st.button(
 
 if st.session_state.project_created:
 
-    st.header("🎭 Character Bible")
+    st.divider()
 
-    st.write(
-        "مرکزی کردار: پیاری مرغی اور اس کا بچہ۔ "
-        "ہم تمام Scenes میں ان کی شکل کو مستقل "
-        "رکھنے کی کوشش کریں گے۔"
+    st.header(
+        "🎬 Story Scenes"
     )
-
-    st.header("🎬 Scene Plan")
 
     for item in st.session_state.scenes:
 
@@ -601,15 +685,24 @@ if st.session_state.project_created:
 
         with st.expander(
             f"🎬 Scene {scene_number}",
-            expanded=True
+            expanded=(
+                scene_number == 1
+            )
         ):
 
             st.write(
-                f"📖 **Story:** {item['story']}"
+                f"📖 **Story:** "
+                f"{item['story']}"
             )
 
             st.write(
-                f"🎭 **Character:** {item['character']}"
+                f"🎭 **Character:** "
+                f"{item['character']}"
+            )
+
+            st.write(
+                f"🎥 **Action:** "
+                f"{item['animation_prompt']}"
             )
 
 
@@ -617,13 +710,18 @@ if st.session_state.project_created:
             # IMAGE
             # =================================================
 
-            if scene_number in st.session_state.generated_images:
+            if (
+                scene_number
+                in st.session_state.generated_images
+            ):
 
                 st.image(
                     st.session_state.generated_images[
                         scene_number
                     ],
-                    caption=f"Scene {scene_number}"
+                    caption=(
+                        f"Scene {scene_number}"
+                    )
                 )
 
 
@@ -633,15 +731,17 @@ if st.session_state.project_created:
 
             if st.button(
                 f"🖼️ Scene {scene_number} کی تصویر بنائیں",
-                key=f"image_button_{scene_number}"
+                key=f"image_{scene_number}"
             ):
 
                 with st.spinner(
                     "🎨 AI تصویر بنا رہا ہے..."
                 ):
 
-                    image, error = generate_image(
-                        item["image_prompt"]
+                    image, error = (
+                        generate_image(
+                            item["image_prompt"]
+                        )
                     )
 
                 if image is not None:
@@ -660,26 +760,31 @@ if st.session_state.project_created:
 
 
             # =================================================
-            # AI ANIMATION
+            # AI MOTION
             # =================================================
 
-            if scene_number in st.session_state.generated_images:
+            if (
+                scene_number
+                in st.session_state.generated_images
+            ):
 
                 if st.button(
-                    f"🎬 Scene {scene_number} کو AI Animate کریں",
-                    key=f"animate_button_{scene_number}"
+                    f"🎥 Scene {scene_number} کو Animate کریں",
+                    key=f"animate_{scene_number}"
                 ):
 
                     with st.spinner(
-                        "🤖 AI movement بنا رہا ہے..."
+                        "🤖 AI scene movement بنا رہا ہے..."
                     ):
 
-                        video_path, error = create_ai_video(
-                            st.session_state.generated_images[
+                        video_path, error = (
+                            create_ai_video(
+                                st.session_state.generated_images[
+                                    scene_number
+                                ],
+                                item["animation_prompt"],
                                 scene_number
-                            ],
-                            item["animation_prompt"],
-                            scene_number
+                            )
                         )
 
                     if video_path is not None:
@@ -689,7 +794,7 @@ if st.session_state.project_created:
                         ] = video_path
 
                         st.success(
-                            "✅ AI animated video تیار ہے!"
+                            "✅ Animated video تیار ہے!"
                         )
 
                     else:
@@ -700,10 +805,13 @@ if st.session_state.project_created:
 
 
             # =================================================
-            # SHOW ANIMATED VIDEO
+            # SHOW VIDEO
             # =================================================
 
-            if scene_number in st.session_state.video_files:
+            if (
+                scene_number
+                in st.session_state.video_files
+            ):
 
                 video_path = (
                     st.session_state.video_files[
@@ -711,31 +819,31 @@ if st.session_state.project_created:
                     ]
                 )
 
-                st.subheader(
-                    "🤖 AI Animated Video"
+                st.video(
+                    video_path
                 )
-
-                st.video(video_path)
 
 
                 # =================================================
-                # MUSIC BUTTON
+                # MUSIC
                 # =================================================
 
                 if st.button(
                     f"🎵 Scene {scene_number} میں Music لگائیں",
-                    key=f"music_button_{scene_number}"
+                    key=f"music_{scene_number}"
                 ):
 
                     with st.spinner(
-                        "🎵 خوبصورت background music تیار ہو رہا ہے..."
+                        "🎵 Background music تیار ہو رہا ہے..."
                     ):
 
-                        final_path, error = add_music_to_video(
-                            video_path,
-                            music_style,
-                            scene_number,
-                            music_volume
+                        final_path, error = (
+                            add_music_to_video(
+                                video_path,
+                                music_style,
+                                scene_number,
+                                music_volume
+                            )
                         )
 
                     if final_path is not None:
@@ -745,7 +853,7 @@ if st.session_state.project_created:
                         ] = final_path
 
                         st.success(
-                            "🎉 Music کے ساتھ Final Video تیار ہے!"
+                            "🎉 Music کے ساتھ final scene تیار ہے!"
                         )
 
                     else:
@@ -756,10 +864,13 @@ if st.session_state.project_created:
 
 
             # =================================================
-            # FINAL VIDEO
+            # FINAL SCENE
             # =================================================
 
-            if scene_number in st.session_state.final_videos:
+            if (
+                scene_number
+                in st.session_state.final_videos
+            ):
 
                 final_path = (
                     st.session_state.final_videos[
@@ -768,39 +879,31 @@ if st.session_state.project_created:
                 )
 
                 st.subheader(
-                    "🎞️ Final Video"
+                    "🎞️ Final Scene"
                 )
 
-                st.video(final_path)
+                st.video(
+                    final_path
+                )
 
                 with open(
                     final_path,
                     "rb"
-                ) as final_file:
+                ) as file:
 
                     st.download_button(
-                        "⬇️ Final MP4 Download کریں",
-                        final_file,
+                        "⬇️ MP4 Download کریں",
+                        file,
                         file_name=(
                             f"scene_{scene_number}_final.mp4"
                         ),
                         mime="video/mp4",
-                        key=f"download_button_{scene_number}"
+                        key=(
+                            f"download_{scene_number}"
+                        )
                     )
 
 
 # =========================================================
 # PIPELINE
-# =========================================================
-
-st.divider()
-
-st.header(
-    "🚧 AI Generation Pipeline"
-)
-
-st.write(
-    "📝 Story → 🎬 Scenes → 🖼️ AI Images → "
-    "🤖 AI Motion → 🎵 Background Music → "
-    "🎞️ Final MP4"
-        )
+# =====================
