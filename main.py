@@ -17,23 +17,23 @@ st.set_page_config(
 # SESSION STATE
 # =========================================================
 
-DEFAULTS = {
-    "scenes": [],
-    "generated_images": {},
-    "video_files": {},
-    "final_videos": {},
-    "full_movie_path": None,
-    "project_created": False,
-}
+if "scenes" not in st.session_state:
+    st.session_state.scenes = []
 
-for key, value in DEFAULTS.items():
-    if key not in st.session_state:
-        if isinstance(value, dict):
-            st.session_state[key] = {}
-        elif isinstance(value, list):
-            st.session_state[key] = []
-        else:
-            st.session_state[key] = value
+if "generated_images" not in st.session_state:
+    st.session_state.generated_images = {}
+
+if "video_files" not in st.session_state:
+    st.session_state.video_files = {}
+
+if "final_videos" not in st.session_state:
+    st.session_state.final_videos = {}
+
+if "full_movie_path" not in st.session_state:
+    st.session_state.full_movie_path = None
+
+if "project_created" not in st.session_state:
+    st.session_state.project_created = False
 
 
 # =========================================================
@@ -76,6 +76,8 @@ def create_ai_video(
     scene_number,
     clip_number=1
 ):
+
+    temp_path = None
 
     try:
 
@@ -156,16 +158,23 @@ def create_ai_video(
                 "سمجھ نہیں آیا۔"
             )
 
-        try:
-            os.remove(temp_path)
-        except Exception:
-            pass
-
         return output, None
 
     except Exception as exc:
 
         return None, str(exc)
+
+    finally:
+
+        if (
+            temp_path
+            and os.path.exists(temp_path)
+        ):
+
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
 
 
 # =========================================================
@@ -187,96 +196,204 @@ def create_background_music(
         float(duration)
     )
 
-    music_patterns = {
+    patterns = {
 
         "😊 Happy / Cheerful": [
 
-            [261.63, 329.63, 392.00, 523.25],
+            [
+                261.63,
+                329.63,
+                392.00,
+                523.25
+            ],
 
-            [293.66, 349.23, 440.00, 587.33],
+            [
+                293.66,
+                349.23,
+                440.00,
+                587.33
+            ],
 
-            [261.63, 349.23, 392.00, 523.25]
+            [
+                261.63,
+                349.23,
+                392.00,
+                523.25
+            ]
 
         ],
 
         "🌸 Cute / Sweet": [
 
-            [261.63, 293.66, 329.63, 392.00],
+            [
+                261.63,
+                293.66,
+                329.63,
+                392.00
+            ],
 
-            [293.66, 329.63, 392.00, 440.00],
+            [
+                293.66,
+                329.63,
+                392.00,
+                440.00
+            ],
 
-            [261.63, 329.63, 392.00, 493.88]
+            [
+                261.63,
+                329.63,
+                392.00,
+                493.88
+            ]
 
         ],
 
         "🌾 Farm / Nature": [
 
-            [220.00, 261.63, 329.63, 392.00],
+            [
+                220.00,
+                261.63,
+                329.63,
+                392.00
+            ],
 
-            [246.94, 293.66, 369.99, 440.00],
+            [
+                246.94,
+                293.66,
+                369.99,
+                440.00
+            ],
 
-            [220.00, 293.66, 329.63, 440.00]
+            [
+                220.00,
+                293.66,
+                329.63,
+                440.00
+            ]
 
         ],
 
         "✨ Magical / Fantasy": [
 
-            [261.63, 349.23, 440.00, 523.25],
+            [
+                261.63,
+                349.23,
+                440.00,
+                523.25
+            ],
 
-            [293.66, 369.99, 466.16, 587.33],
+            [
+                293.66,
+                369.99,
+                466.16,
+                587.33
+            ],
 
-            [261.63, 329.63, 392.00, 523.25]
+            [
+                261.63,
+                329.63,
+                392.00,
+                523.25
+            ]
 
         ],
 
         "😂 Funny Cartoon": [
 
-            [293.66, 369.99, 440.00, 587.33],
+            [
+                293.66,
+                369.99,
+                440.00,
+                587.33
+            ],
 
-            [329.63, 415.30, 493.88, 659.25],
+            [
+                329.63,
+                415.30,
+                493.88,
+                659.25
+            ],
 
-            [293.66, 392.00, 466.16, 587.33]
+            [
+                293.66,
+                392.00,
+                466.16,
+                587.33
+            ]
 
         ],
 
         "😌 Peaceful": [
 
-            [220.00, 261.63, 329.63, 392.00],
+            [
+                220.00,
+                261.63,
+                329.63,
+                392.00
+            ],
 
-            [196.00, 246.94, 293.66, 369.99],
+            [
+                196.00,
+                246.94,
+                293.66,
+                369.99
+            ],
 
-            [220.00, 277.18, 329.63, 415.30]
+            [
+                220.00,
+                277.18,
+                329.63,
+                415.30
+            ]
 
         ],
 
         "🎬 Cinematic": [
 
-            [196.00, 246.94, 293.66, 392.00],
+            [
+                196.00,
+                246.94,
+                293.66,
+                392.00
+            ],
 
-            [220.00, 277.18, 349.23, 440.00],
+            [
+                220.00,
+                277.18,
+                349.23,
+                440.00
+            ],
 
-            [196.00, 293.66, 349.23, 392.00]
+            [
+                196.00,
+                293.66,
+                349.23,
+                392.00
+            ]
 
         ]
 
     }
 
-    style_patterns = music_patterns.get(
+    selected = patterns.get(
         style,
-        music_patterns["😊 Happy / Cheerful"]
+        patterns["😊 Happy / Cheerful"]
     )
 
-    shift = max(
-        0,
+    offset = (
         int(track) - 1
+    ) % len(selected)
+
+    selected = (
+        selected[offset:]
+        + selected[:offset]
     )
 
-    shift = shift % len(style_patterns)
-
-    selected_patterns = (
-        style_patterns[shift:]
-        + style_patterns[:shift]
+    total_samples = int(
+        duration * sample_rate
     )
+
+    chunk_size = sample_rate
 
     with wave.open(
         output_path,
@@ -287,29 +404,19 @@ def create_background_music(
         wav.setsampwidth(2)
         wav.setframerate(sample_rate)
 
-        chunk_seconds = 1.0
+        start = 0
 
-        total_samples = int(
-            duration * sample_rate
-        )
-
-        chunk_size = int(
-            chunk_seconds * sample_rate
-        )
-
-        position = 0
-
-        while position < total_samples:
+        while start < total_samples:
 
             end = min(
-                position + chunk_size,
+                start + chunk_size,
                 total_samples
             )
 
             frames = []
 
             for i in range(
-                position,
+                start,
                 end
             ):
 
@@ -317,21 +424,22 @@ def create_background_music(
                     i / sample_rate
                 )
 
-                section = int(
-                    current_time / 8.0
+                section = (
+                    int(
+                        current_time / 8.0
+                    )
+                    % len(selected)
                 )
 
-                pattern = selected_patterns[
+                pattern = selected[
                     section
-                    % len(selected_patterns)
                 ]
 
-                beat_time = (
-                    current_time % 2.0
-                )
-
                 note_index = (
-                    int(beat_time / 0.5)
+                    int(
+                        (current_time % 2.0)
+                        / 0.5
+                    )
                     % len(pattern)
                 )
 
@@ -410,12 +518,14 @@ def create_background_music(
                     )
                 )
 
+                value = int(
+                    sample * 32767
+                )
+
                 frames.append(
-                    int(
-                        sample * 32767
-                    ).to_bytes(
+                    value.to_bytes(
                         2,
-                        byteorder="little",
+                        "little",
                         signed=True
                     )
                 )
@@ -424,13 +534,13 @@ def create_background_music(
                 b"".join(frames)
             )
 
-            position = end
+            start = end
 
     return output_path
 
 
 # =========================================================
-# ADD MUSIC TO SINGLE VIDEO
+# MUSIC ON SINGLE SCENE
 # =========================================================
 
 def add_music_to_video(
@@ -471,11 +581,9 @@ def add_music_to_video(
             video_path
         )
 
-        duration = video.duration
-
         create_background_music(
             style,
-            duration,
+            video.duration,
             music_path,
             volume,
             track
@@ -512,7 +620,7 @@ def add_music_to_video(
 # STORY SPLITTER
 # =========================================================
 
-def split_story_into_parts(
+def split_story(
     story,
     count
 ):
@@ -543,12 +651,12 @@ def split_story_into_parts(
 
     groups = []
 
-    base_size = (
+    base = (
         len(parts)
         // count
     )
 
-    remainder = (
+    extra = (
         len(parts)
         % count
     )
@@ -559,20 +667,24 @@ def split_story_into_parts(
         count
     ):
 
-        size = base_size
+        size = (
+            base
+            + (
+                1
+                if i < extra
+                else 0
+            )
+        )
 
-        if i < remainder:
-            size += 1
-
-        group = " ".join(
+        text = " ".join(
             parts[
                 index:index + size
             ]
         )
 
-        if group:
+        if text:
             groups.append(
-                group
+                text
             )
 
         index += size
@@ -584,35 +696,35 @@ def split_story_into_parts(
 # ACTION DETECTION
 # =========================================================
 
-def detect_action(text):
+def detect_action(
+    text
+):
 
     lower = text.lower()
 
     if any(
-        word in lower
-        for word in [
+        x in lower
+        for x in [
             "fly",
             "flies",
             "flying",
             "اڑ",
             "اڑا",
             "اڑتا",
-            "اڑنے",
             "उड़",
-            "उड़ा",
-            "उड़ता"
+            "उड़ा"
         ]
     ):
 
         return (
-            "The character flies through the environment, "
-            "moves wings naturally, looks around while flying, "
-            "then gently changes direction."
+            "The character flies naturally, "
+            "moves its wings, looks around, "
+            "and changes direction gently."
         )
 
     if any(
-        word in lower
-        for word in [
+        x in lower
+        for x in [
             "stone",
             "stones",
             "پتھر",
@@ -622,13 +734,13 @@ def detect_action(text):
 
         return (
             "The character notices small stones, "
-            "moves toward them, picks them up naturally, "
-            "and interacts with them carefully."
+            "moves toward them, picks them up, "
+            "and interacts with them naturally."
         )
 
     if any(
-        word in lower
-        for word in [
+        x in lower
+        for x in [
             "water",
             "drink",
             "drinks",
@@ -648,8 +760,8 @@ def detect_action(text):
         )
 
     if any(
-        word in lower
-        for word in [
+        x in lower
+        for x in [
             "pot",
             "matka",
             "مٹکا",
@@ -666,27 +778,25 @@ def detect_action(text):
         )
 
     if any(
-        word in lower
-        for word in [
+        x in lower
+        for x in [
             "run",
             "runs",
             "running",
             "دوڑ",
-            "دوڑتا",
-            "दौड़",
-            "दौड़ता"
+            "दौड़"
         ]
     ):
 
         return (
             "The character runs naturally through "
-            "the environment with believable body "
-            "and leg movement."
+            "the environment with believable "
+            "body and leg movement."
         )
 
     if any(
-        word in lower
-        for word in [
+        x in lower
+        for x in [
             "walk",
             "walks",
             "walking",
@@ -699,53 +809,49 @@ def detect_action(text):
 
         return (
             "The character walks naturally, "
-            "looks around, and interacts with "
-            "the environment."
+            "looks around, and interacts "
+            "with the environment."
         )
 
     if any(
-        word in lower
-        for word in [
+        x in lower
+        for x in [
             "look",
             "looks",
             "see",
             "sees",
             "دیکھ",
-            "دیکھتا",
-            "देख",
-            "देखता"
+            "देख"
         ]
     ):
 
         return (
-            "The character slowly looks around, "
-            "notices the important object, and "
-            "reacts with clear facial expression."
+            "The character looks around slowly, "
+            "notices the important object, "
+            "and reacts with expressive "
+            "facial movement."
         )
 
     if any(
-        word in lower
-        for word in [
+        x in lower
+        for x in [
             "happy",
             "happily",
             "خوش",
-            "خوشی",
-            "खुश",
-            "खुशी"
+            "खुश"
         ]
     ):
 
         return (
             "The character becomes happy, "
-            "smiles, moves naturally, and shows "
-            "joyful body language."
+            "smiles, and shows joyful "
+            "natural body language."
         )
 
     if any(
-        word in lower
-        for word in [
+        x in lower
+        for x in [
             "sad",
-            "sadly",
             "اداس",
             "उदास"
         ]
@@ -753,15 +859,15 @@ def detect_action(text):
 
         return (
             "The character shows gentle sadness "
-            "with natural facial expression and "
-            "slow body movement."
+            "with natural facial expression "
+            "and slow movement."
         )
 
     return (
-        "Characters perform the action described "
-        "in the story naturally; walking, stopping, "
-        "looking, turning, interacting with objects, "
-        "and using expressive body language when appropriate."
+        "Characters perform the story action "
+        "naturally with walking, looking, "
+        "turning, object interaction, and "
+        "expressive body movement."
     )
 
 
@@ -769,15 +875,15 @@ def detect_action(text):
 # CHARACTER DESCRIPTION
 # =========================================================
 
-def create_character_description(
+def character_description(
     story
 ):
 
     lower = story.lower()
 
     if any(
-        word in lower
-        for word in [
+        x in lower
+        for x in [
             "crow",
             "کوا",
             "कौआ"
@@ -786,13 +892,13 @@ def create_character_description(
 
         return (
             "a cute black crow with expressive eyes, "
-            "soft cartoon feathers, friendly child-safe design, "
-            "consistent appearance"
+            "soft cartoon feathers, and a friendly "
+            "child-safe design"
         )
 
     if any(
-        word in lower
-        for word in [
+        x in lower
+        for x in [
             "rabbit",
             "خرگوش",
             "खरगोश"
@@ -800,14 +906,13 @@ def create_character_description(
     ):
 
         return (
-            "a cute fluffy rabbit with expressive eyes, "
-            "friendly child-safe cartoon design, "
-            "consistent appearance"
+            "a cute fluffy rabbit with expressive eyes "
+            "and a friendly child-safe cartoon design"
         )
 
     if any(
-        word in lower
-        for word in [
+        x in lower
+        for x in [
             "fox",
             "لومڑی",
             "लोमड़ी"
@@ -815,9 +920,8 @@ def create_character_description(
     ):
 
         return (
-            "a friendly orange fox with expressive eyes, "
-            "child-safe cartoon design, "
-            "consistent appearance"
+            "a friendly orange fox with expressive eyes "
+            "and a child-safe cartoon design"
         )
 
     return (
@@ -836,20 +940,18 @@ def create_scene_plan(
     language
 ):
 
-    parts = split_story_into_parts(
+    parts = split_story(
         story,
         count
     )
 
-    character_description = (
-        create_character_description(
-            story
-        )
+    character = character_description(
+        story
     )
 
     scenes = []
 
-    for i, part in enumerate(
+    for number, part in enumerate(
         parts,
         start=1
     ):
@@ -861,21 +963,13 @@ def create_scene_plan(
         if language == "اردو":
 
             story_text = (
-                f"{part} — منظر {i}"
-            )
-
-            character = (
-                character_description
+                f"{part} — منظر {number}"
             )
 
         else:
 
             story_text = (
-                f"{part} — Scene {i}"
-            )
-
-            character = (
-                character_description
+                f"{part} — Scene {number}"
             )
 
         image_prompt = (
@@ -884,21 +978,21 @@ def create_scene_plan(
             "friendly expressive characters, "
             "consistent character design, "
             "child-safe animation style, "
-            f"main character design: "
-            f"{character_description}, "
+            f"main character: {character}, "
             f"story action: {part}, "
             "clear composition, high quality, "
             "same visual world and character appearance"
         )
 
         animation_prompt = (
-            f"{action} "
-            "Keep the main character's appearance consistent. "
-            "Use natural movement and a gentle cinematic camera."
+            action
+            + " Keep the main character appearance "
+            + "consistent. Use natural movement and "
+            + "gentle cinematic camera movement."
         )
 
         scenes.append({
-            "scene": i,
+            "scene": number,
             "story": story_text,
             "character": character,
             "image_prompt": image_prompt,
@@ -909,13 +1003,13 @@ def create_scene_plan(
 
 
 # =========================================================
-# COMBINE VIDEO CLIPS
+# JOIN VIDEO CLIPS
 # =========================================================
 
 def combine_video_clips(
     video_paths,
     output_path,
-    target_duration=None
+    target_duration
 ):
 
     from moviepy import (
@@ -937,54 +1031,4 @@ def combine_video_clips(
 
                 clips.append(
                     VideoFileClip(path)
-                )
-
-        if not clips:
-
-            return (
-                None,
-                0,
-                "کوئی video clips نہیں ملیں۔"
-            )
-
-        base_duration = sum(
-            clip.duration
-            for clip in clips
-        )
-
-        if (
-            target_duration
-            and base_duration < target_duration
-        ):
-
-            repeats = int(
-                math.ceil(
-                    target_duration
-                    / base_duration
-                )
-            )
-
-            extended_clips = []
-
-            for _ in range(
-                repeats
-            ):
-
-                for clip in clips:
-
-                    extended_clips.append(
-                        clip
-                    )
-
-            final_video = (
-                concatenate_videoclips(
-                    extended_clips,
-                    method="compose"
-                )
-            )
-
-            final_video = (
-                final_video.subclipped(
-                    0,
-                    min(
-                
+    
