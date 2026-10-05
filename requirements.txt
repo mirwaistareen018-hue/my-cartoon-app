@@ -1,9 +1,7 @@
 streamlit
-huggingface_hub>=0.35.0
-gradio_client>=1.10.0
+huggingface_hub
 Pillow
 numpy
-moviepy>=2.0.0
+moviepy
 imageio-ffmpeg
 edge-tts
-requests
