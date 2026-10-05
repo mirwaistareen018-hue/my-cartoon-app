@@ -37,7 +37,7 @@ def default_state():
         "images": {},
         "videos": {},
         "movie": None,
-        "music": None
+        "music": None,
     }
 
 
@@ -52,9 +52,12 @@ def load_state():
             )
         )
 
-        base = default_state()
-        base.update(data)
-        return base
+        state = default_state()
+
+        if isinstance(data, dict):
+            state.update(data)
+
+        return state
 
     except Exception:
         return default_state()
@@ -67,7 +70,7 @@ def save_state(state):
             ensure_ascii=False,
             indent=2
         ),
-        encoding="utf-8"
+        encoding="utf-8",
     )
 
 
@@ -87,9 +90,9 @@ def split_story(story):
     )
 
     parts = [
-        p.strip()
-        for p in parts
-        if p.strip()
+        part.strip()
+        for part in parts
+        if part.strip()
     ]
 
     if len(parts) <= 12:
@@ -112,17 +115,16 @@ def split_story(story):
 
 
 def detect_action(text):
-    t = text.lower()
+    lower = text.lower()
 
     if any(
-        x in t
-        for x in [
+        word in lower
+        for word in (
             "fly",
             "flies",
             "اڑ",
-            "اڑتا",
             "پرواز"
-        ]
+        )
     ):
         return (
             "The character flies naturally "
@@ -130,15 +132,15 @@ def detect_action(text):
         )
 
     if any(
-        x in t
-        for x in [
+        word in lower
+        for word in (
             "walk",
             "walking",
             "run",
             "runs",
             "چل",
             "دوڑ"
-        ]
+        )
     ):
         return (
             "The character walks or runs "
@@ -146,13 +148,13 @@ def detect_action(text):
         )
 
     if any(
-        x in t
-        for x in [
+        word in lower
+        for word in (
             "drink",
             "drinks",
             "پیت",
             "پانی"
-        ]
+        )
     ):
         return (
             "The character drinks naturally "
@@ -160,15 +162,15 @@ def detect_action(text):
         )
 
     if any(
-        x in t
-        for x in [
+        word in lower
+        for word in (
             "look",
             "looks",
             "see",
             "sees",
             "دیکھ",
             "نظر"
-        ]
+        )
     ):
         return (
             "The character looks around "
@@ -176,14 +178,14 @@ def detect_action(text):
         )
 
     if any(
-        x in t
-        for x in [
+        word in lower
+        for word in (
             "happy",
             "laugh",
             "laughs",
             "خوش",
             "ہنستا"
-        ]
+        )
     ):
         return (
             "The character reacts happily "
@@ -191,8 +193,8 @@ def detect_action(text):
         )
 
     if any(
-        x in t
-        for x in [
+        word in lower
+        for word in (
             "pick",
             "picks",
             "drop",
@@ -201,7 +203,7 @@ def detect_action(text):
             "stones",
             "اٹھ",
             "پتھر"
-        ]
+        )
     ):
         return (
             "The character picks up and "
@@ -210,7 +212,7 @@ def detect_action(text):
 
     return (
         "The characters perform the main "
-        "action of the scene with natural movement."
+        "action with natural movement."
     )
 
 
@@ -228,12 +230,13 @@ def make_scenes(story):
                 "action": detect_action(text),
                 "prompt": (
                     "A high quality colorful 3D "
-                    "cartoon movie scene, cinematic "
-                    "composition, consistent character "
-                    "design, expressive faces, detailed "
+                    "cartoon movie scene, "
+                    "cinematic composition, "
+                    "consistent character design, "
+                    "expressive faces, detailed "
                     "environment. "
                     + text
-                )
+                ),
             }
         )
 
@@ -268,7 +271,7 @@ def generate_image(
         image = client.text_to_image(
             prompt,
             model="black-forest-labs/FLUX.1-schnell",
-            provider="auto"
+            provider="auto",
         )
 
         path = (
@@ -294,7 +297,7 @@ def create_ai_video(
     image_path,
     motion_prompt,
     number,
-    clip_number=1
+    clip_number
 ):
     try:
         from gradio_client import (
@@ -336,9 +339,11 @@ def create_ai_video(
 
         negative = (
             "static image, frozen frame, "
-            + "blurry, distorted, deformed character, "
-            + "extra limbs, flickering, unstable face, "
-            + "warped body, bad anatomy"
+            + "blurry, distorted, "
+            + "deformed character, "
+            + "extra limbs, flickering, "
+            + "unstable face, warped body, "
+            + "bad anatomy"
         )
 
         result = client.predict(
@@ -351,7 +356,7 @@ def create_ai_video(
             1,
             42,
             True,
-            api_name="/generate_video"
+            api_name="/generate_video",
         )
 
         generated = (
@@ -462,7 +467,7 @@ def create_music(
             164.81,
             196.00,
             261.63
-        ]
+        ],
     }
 
     notes = styles.get(
@@ -480,23 +485,23 @@ def create_music(
         dtype=np.float32
     )
 
-    for i in range(
+    for start in range(
         0,
         total,
         note_len
     ):
-        idx = (
-            i // note_len + track
+        index = (
+            start // note_len + track
         ) % len(notes)
 
-        n = min(
+        count = min(
             note_len,
-            total - i
+            total - start
         )
 
         tt = (
             np.arange(
-                n,
+                count,
                 dtype=np.float32
             )
             / rate
@@ -507,14 +512,14 @@ def create_music(
             * np.sin(
                 2
                 * np.pi
-                * notes[idx]
+                * notes[index]
                 * tt
             )
         )
 
         fade_len = min(
             300,
-            n
+            count
         )
 
         if fade_len > 1:
@@ -525,16 +530,11 @@ def create_music(
                 dtype=np.float32
             )
 
-            tone[
-                :fade_len
-            ] *= fade
-
-            tone[
-                -fade_len:
-            ] *= fade[::-1]
+            tone[:fade_len] *= fade
+            tone[-fade_len:] *= fade[::-1]
 
         wave_data[
-            i:i + n
+            start:start + count
         ] += tone
 
     pcm = np.clip(
@@ -594,7 +594,6 @@ def import_moviepy():
         )
 
     except Exception:
-
         try:
             from moviepy.editor import (
                 VideoFileClip,
@@ -659,7 +658,7 @@ def combine_videos(
             output,
             codec="libx264",
             audio_codec="aac",
-            logger=None
+            logger=None,
         )
 
         return (
@@ -725,14 +724,16 @@ def add_music(
                 video.duration
             )
 
-        elif audio.duration < video.duration:
-            if hasattr(
+        elif (
+            audio.duration < video.duration
+            and hasattr(
                 audio,
                 "audio_loop"
-            ):
-                audio = audio.audio_loop(
-                    duration=video.duration
-                )
+            )
+        ):
+            audio = audio.audio_loop(
+                duration=video.duration
+            )
 
         if hasattr(
             audio,
@@ -767,7 +768,7 @@ def add_music(
             output,
             codec="libx264",
             audio_codec="aac",
-            logger=None
+            logger=None,
         )
 
         return (
@@ -859,7 +860,7 @@ with st.sidebar:
 story = st.text_area(
     "📝 مکمل کہانی یہاں paste کریں / Paste your full story",
     height=220,
-    placeholder="مثال: ایک پیاسا کوا جنگل میں اڑ رہا تھا اور اسے پانی کا برتن ملا۔"
+    placeholder="Example: A thirsty crow was flying through a forest and found a pot of water.",
 )
 
 
@@ -894,8 +895,8 @@ with col3:
             "Magical / Fantasy",
             "Funny Cartoon",
             "Peaceful",
-            "Cinematic"
-        ]
+            "Cinematic",
+        ],
     )
 
 
@@ -941,15 +942,12 @@ with c:
 
 
 if make_plan:
-
     if not story.strip():
-
         st.warning(
             "پہلے کہانی لکھیں۔"
         )
 
     else:
-
         state["scenes"] = make_scenes(
             story
         )
@@ -964,18 +962,16 @@ if make_plan:
         )
 
         st.success(
-            f"{len(state['scenes'])} scenes تیار ہو گئے۔"
+            "Scene plan تیار ہو گیا۔"
         )
 
 
 if state["scenes"]:
-
     st.subheader(
         "🎞️ Scene Plan"
     )
 
     for scene in state["scenes"]:
-
         st.markdown(
             f"**Scene {scene['number']}** — {scene['story']}  \n"
             f"**Action:** {scene['action']}"
@@ -983,15 +979,12 @@ if state["scenes"]:
 
 
 if make_images:
-
     if not state["scenes"]:
-
         st.warning(
             "پہلے Scene Plan بنائیں۔"
         )
 
     else:
-
         progress = st.progress(
             0
         )
@@ -1004,7 +997,6 @@ if make_images:
             state["scenes"],
             1
         ):
-
             key = str(
                 scene["number"]
             )
@@ -1019,18 +1011,15 @@ if make_images:
                     existing
                 ).exists()
             ):
-
                 path, error = generate_image(
                     scene["prompt"],
                     scene["number"]
                 )
 
                 if error:
-
                     st.error(
                         f"Scene {key}: {error}"
                     )
-
                     break
 
                 state[
@@ -1051,15 +1040,12 @@ if make_images:
 
 
 if make_motion:
-
     if not state["images"]:
-
         st.warning(
             "پہلے images بنائیں۔"
         )
 
     else:
-
         total = (
             len(
                 state["scenes"]
@@ -1076,7 +1062,6 @@ if make_motion:
         stopped = False
 
         for scene in state["scenes"]:
-
             if stopped:
                 break
 
@@ -1095,7 +1080,6 @@ if make_motion:
                 1,
                 clips_per_scene + 1
             ):
-
                 vkey = (
                     f"{key}_{clip_no}"
                 )
@@ -1110,7 +1094,6 @@ if make_motion:
                         existing
                     ).exists()
                 ):
-
                     done += 1
 
                     progress.progress(
@@ -1126,10 +1109,4 @@ if make_motion:
                     image_path,
                     scene["action"],
                     scene["number"],
-                    clip_no
-                )
-
-                if error:
-
-                    st.error(
-                    
+          
