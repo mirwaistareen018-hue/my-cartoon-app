@@ -1,5 +1,4 @@
 import os
-import re
 import json
 import math
 import shutil
@@ -25,101 +24,102 @@ for folder in (IMAGE_DIR, VIDEO_DIR, MUSIC_DIR):
     folder.mkdir(parents=True, exist_ok=True)
 
 st.set_page_config(page_title="AI Cartoon Movie Studio", page_icon="🎬", layout="wide")
+st.title("🎬 AI Cartoon Movie Studio")
+st.caption("Story → Scenes → Images → Motion → Music → Movie")
 
 
 def default_state():
-    return {"scenes": [], "images": {}, "videos": {}, "movie": None, "music": None}
+    return {
+        "story": "",
+        "scenes": [],
+        "images": {},
+        "videos": {},
+        "music": None,
+        "final_movie": None,
+    }
 
 
 def load_state():
     if not STATE_FILE.exists():
         return default_state()
     try:
-        data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        with open(STATE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
         state = default_state()
-        if isinstance(data, dict):
-            state.update(data)
+        state.update(data)
         return state
     except Exception:
         return default_state()
 
 
 def save_state(state):
-    STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    APP_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = STATE_FILE.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+    tmp.replace(STATE_FILE)
 
 
-def split_story(story):
-    text = re.sub(r"\s+", " ", story.strip())
+def split_story(text):
+    text = " ".join(text.strip().split())
     if not text:
         return []
-    parts = [x.strip() for x in re.split(r"(?<=[.!?۔])\s+", text) if x.strip()]
-    if len(parts) <= 12:
-        return parts
-    size = math.ceil(len(parts) / 12)
-    return [" ".join(parts[i:i + size]) for i in range(0, len(parts), size)][:12]
+    parts = []
+    current = ""
+    for word in text.split():
+        current = (current + " " + word).strip()
+        if len(current.split()) >= 35:
+            parts.append(current)
+            current = ""
+    if current:
+        parts.append(current)
+    return parts
 
 
 def detect_action(text):
-    lower = text.lower()
-
-    if any(x in lower for x in ("fly", "flies", "اڑ", "پرواز")):
-        return "The character flies naturally through the environment."
-
-    if any(x in lower for x in ("walk", "walking", "run", "runs", "چل", "دوڑ")):
-        return "The character walks or runs naturally."
-
-    if any(x in lower for x in ("drink", "drinks", "پیت", "پانی")):
-        return "The character drinks naturally and reacts to the water."
-
-    if any(x in lower for x in ("look", "looks", "see", "sees", "دیکھ", "نظر")):
+    low = text.lower()
+    if any(x in low for x in ["fly", "flies", "flying", "اڑ"]):
+        return "The character flies naturally through the scene."
+    if any(x in low for x in ["walk", "walking", "چل"]):
+        return "The character walks naturally through the scene."
+    if any(x in low for x in ["run", "running", "دوڑ"]):
+        return "The character runs naturally through the scene."
+    if any(x in low for x in ["drink", "drinks", "پیتا"]):
+        return "The character moves to the water and drinks naturally."
+    if any(x in low for x in ["look", "looks", "دیکھ"]):
         return "The character looks around and reacts naturally."
-
-    if any(x in lower for x in ("happy", "laugh", "laughs", "خوش", "ہنستا")):
-        return "The character reacts happily with natural body movement."
-
-    if any(x in lower for x in ("pick", "picks", "drop", "drops", "stone", "stones", "اٹھ", "پتھر")):
-        return "The character picks up and drops an object naturally."
-
-    return "The characters perform the main action with natural movement."
+    return "Natural character movement and cinematic environmental motion."
 
 
 def make_scenes(story):
-    scenes = []
+    chunks = split_story(story)
+    return [
+        {"number": i, "text": text, "action": detect_action(text)}
+        for i, text in enumerate(chunks, 1)
+    ]
 
-    for number, text in enumerate(split_story(story), 1):
-        scenes.append({
-            "number": number,
-            "story": text,
-            "action": detect_action(text),
-            "prompt": "A high quality colorful 3D cartoon movie scene, cinematic composition, consistent character design, expressive faces, detailed environment. " + text
-        })
 
-    return scenes
+def hf_token():
+    return st.secrets.get("HF_TOKEN", os.environ.get("HF_TOKEN", ""))
 
 
 def generate_image(prompt, number):
-    token = os.getenv("HF_TOKEN")
-
-    if not token:
-        return None, "HF_TOKEN is missing from Streamlit Secrets."
-
     if InferenceClient is None:
         return None, "huggingface_hub is not installed."
-
+    token = hf_token()
+    if not token:
+        return None, "HF_TOKEN is missing from Streamlit Secrets."
     try:
-        client = InferenceClient(token=token)
-
+        client = InferenceClient(provider="auto", api_key=token)
         image = client.text_to_image(
-            prompt,
+            "High quality 3D cartoon movie frame, family friendly, "
+            "cinematic lighting, colorful environment, consistent character. "
+            + prompt,
             model="black-forest-labs/FLUX.1-schnell",
-            provider="auto"
         )
-
-        path = IMAGE_DIR / f"scene_{number}.png"
-        image.save(path)
-
-        return str(path), None
-
+        output = IMAGE_DIR / f"scene_{number}.png"
+        image.save(output)
+        return str(output), None
     except Exception as exc:
         return None, str(exc)
 
@@ -131,14 +131,15 @@ def create_ai_video(image_path, motion_prompt, number, clip_number):
         return None, "gradio_client is not installed."
 
     temp_path = None
-
     try:
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
             temp_path = tmp.name
-
         shutil.copyfile(image_path, temp_path)
 
-        client = Client("zerogpu-aoti/wan2-2-fp8da-aoti-faster")
+        client = Client(
+            "zerogpu-aoti/wan2-2-fp8da-aoti-faster",
+            max_workers=1,
+        )
 
         prompt = (
             motion_prompt
@@ -146,11 +147,10 @@ def create_ai_video(image_path, motion_prompt, number, clip_number):
             + "natural environmental movement, cinematic camera movement, "
             + "stable character appearance"
         )
-
         negative = (
-            "static image, frozen frame, blurry, distorted, "
-            + "deformed character, extra limbs, flickering, "
-            + "unstable face, warped body, bad anatomy"
+            "static image, frozen image, blurry, distorted, "
+            "deformed character, extra limbs, flickering, "
+            "unstable face, warped body, bad anatomy"
         )
 
         result = client.predict(
@@ -163,25 +163,20 @@ def create_ai_video(image_path, motion_prompt, number, clip_number):
             1,
             42,
             True,
-            api_name="/generate_video"
+            api_name="/generate_video",
         )
 
         generated = result[0] if isinstance(result, (list, tuple)) else result
-
         if not generated:
-            return None, "The AI video service returned no video file."
+            return None, "AI video service returned no video."
 
         output = VIDEO_DIR / f"scene_{number}_clip_{clip_number}.mp4"
-
         if isinstance(generated, str):
             shutil.copyfile(generated, output)
             return str(output), None
-
-        return None, "The AI video response format was not recognized."
-
+        return None, "AI video response format was not recognized."
     except Exception as exc:
         return None, str(exc)
-
     finally:
         if temp_path:
             try:
@@ -190,212 +185,131 @@ def create_ai_video(image_path, motion_prompt, number, clip_number):
                 pass
 
 
-def create_music(minutes, style, track):
-    duration = max(10, int(minutes * 60))
+def create_music(duration_seconds, style):
+    duration = max(5, int(duration_seconds))
     rate = 22050
     total = duration * rate
-
-    styles = {
-        "Happy / Cheerful": [261.63, 329.63, 392.00, 523.25],
-        "Cute / Sweet": [329.63, 392.00, 493.88, 659.25],
-        "Farm / Nature": [220.00, 277.18, 329.63, 440.00],
-        "Magical / Fantasy": [261.63, 311.13, 369.99, 466.16],
-        "Funny Cartoon": [293.66, 349.23, 440.00, 587.33],
-        "Peaceful": [196.00, 246.94, 293.66, 392.00],
-        "Cinematic": [130.81, 164.81, 196.00, 261.63]
+    t = np.arange(total, dtype=np.float32) / rate
+    frequencies = {
+        "Happy / Cheerful": 261.63,
+        "Cute / Sweet": 329.63,
+        "Farm / Nature": 220.0,
+        "Magical / Fantasy": 392.0,
+        "Funny Cartoon": 294.0,
+        "Peaceful": 196.0,
+        "Cinematic": 146.83,
     }
-
-    notes = styles.get(style, styles["Happy / Cheerful"])
-    note_len = max(1, int(rate * 0.6))
-    wave_data = np.zeros(total, dtype=np.float32)
-
-    for start in range(0, total, note_len):
-        index = (start // note_len + track) % len(notes)
-        count = min(note_len, total - start)
-        tt = np.arange(count, dtype=np.float32) / rate
-        tone = 0.16 * np.sin(2 * np.pi * notes[index] * tt)
-
-        fade_len = min(300, count)
-
-        if fade_len > 1:
-            fade = np.linspace(0, 1, fade_len, dtype=np.float32)
-            tone[:fade_len] *= fade
-            tone[-fade_len:] *= fade[::-1]
-
-        wave_data[start:start + count] += tone
-
-    pcm = np.clip(wave_data, -0.8, 0.8)
-    pcm = (pcm * 32767).astype(np.int16)
-
-    safe_style = style.split("/")[0].strip().replace(" ", "_")
-    path = MUSIC_DIR / f"music_{safe_style}_{track}.wav"
-
-    with wave.open(str(path), "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(rate)
-        wf.writeframes(pcm.tobytes())
-
-    return str(path)
+    freq = frequencies.get(style, 196.0)
+    signal = (
+        np.sin(2 * np.pi * freq * t)
+        + 0.5 * np.sin(2 * np.pi * freq * 1.5 * t)
+        + 0.25 * np.sin(2 * np.pi * freq * 2 * t)
+    )
+    fade = min(2.0, duration / 2)
+    envelope = np.ones(total, dtype=np.float32)
+    n = int(fade * rate)
+    envelope[:n] = np.linspace(0, 1, n)
+    envelope[-n:] = np.linspace(1, 0, n)
+    audio = np.clip(signal * envelope * 0.12, -1, 1)
+    output = MUSIC_DIR / "background_music.wav"
+    pcm = (audio * 32767).astype(np.int16)
+    with wave.open(str(output), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(rate)
+        wav.writeframes(pcm.tobytes())
+    return str(output)
 
 
-def import_moviepy():
+def moviepy_imports():
     try:
-        from moviepy import VideoFileClip, AudioFileClip, concatenate_videoclips
-        return VideoFileClip, AudioFileClip, concatenate_videoclips, None
-
+        from moviepy import VideoFileClip, concatenate_videoclips
+        return VideoFileClip, concatenate_videoclips
     except Exception:
         try:
-            from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_videoclips
-            return VideoFileClip, AudioFileClip, concatenate_videoclips, None
+            from moviepy.editor import VideoFileClip, concatenate_videoclips
+            return VideoFileClip, concatenate_videoclips
+        except Exception:
+            return None, None
 
-        except Exception as exc:
-            return None, None, None, str(exc)
 
-
-def combine_videos(paths, output):
-    VideoFileClip, _, concatenate_videoclips, error = import_moviepy()
-
-    if error:
-        return None, error
-
+def combine_videos(paths):
+    VideoFileClip, concatenate_videoclips = moviepy_imports()
+    if VideoFileClip is None:
+        return None, "MoviePy is not available."
     clips = []
-    final = None
-
     try:
         for path in paths:
-            clips.append(VideoFileClip(path))
-
+            if path and Path(path).exists():
+                clips.append(VideoFileClip(path))
         if not clips:
-            return None, "No video clips were found."
-
-        final = concatenate_videoclips(
-            clips,
-            method="compose"
-        )
-
+            return None, "No video clips are available."
+        output = APP_DIR / "final_cartoon_movie.mp4"
+        final = concatenate_videoclips(clips, method="compose")
         final.write_videofile(
-            output,
+            str(output),
             codec="libx264",
             audio_codec="aac",
-            logger=None
+            logger=None,
         )
-
-        return output, None
-
-    except Exception as exc:
-        return None, str(exc)
-
-    finally:
-        if final:
-            try:
-                final.close()
-            except Exception:
-                pass
-
+        final.close()
         for clip in clips:
             try:
                 clip.close()
             except Exception:
                 pass
-
-
-def add_music(video_path, music_path, output, volume):
-    VideoFileClip, AudioFileClip, _, error = import_moviepy()
-
-    if error:
-        return None, error
-
-    video = None
-    audio = None
-    final = None
-
-    try:
-        video = VideoFileClip(video_path)
-        audio = AudioFileClip(music_path)
-
-        if audio.duration > video.duration:
-            audio = audio.subclip(0, video.duration)
-
-        elif audio.duration < video.duration and hasattr(audio, "audio_loop"):
-            audio = audio.audio_loop(duration=video.duration)
-
-        if hasattr(audio, "volumex"):
-            audio = audio.volumex(volume)
-
-        elif hasattr(audio, "with_volume_scaled"):
-            audio = audio.with_volume_scaled(volume)
-
-        if hasattr(video, "set_audio"):
-            final = video.set_audio(audio)
-
-        else:
-            final = video.with_audio(audio)
-
-        final.write_videofile(
-            output,
-            codec="libx264",
-            audio_codec="aac",
-            logger=None
-        )
-
-        return output, None
-
+        return str(output), None
     except Exception as exc:
+        for clip in clips:
+            try:
+                clip.close()
+            except Exception:
+                pass
         return None, str(exc)
-
-    finally:
-        for obj in (final, audio, video):
-            if obj:
-                try:
-                    obj.close()
-                except Exception:
-                    pass
 
 
 state = load_state()
 
-st.title("🎬 AI Cartoon Movie Studio")
-st.caption("Urdu + English | Story → Scenes → AI Images → AI Motion → Music → Movie")
-
-
 with st.sidebar:
     st.header("Project Status")
-    st.write("App: OK")
-    st.write("Story: " + ("OK" if state["scenes"] else "Waiting"))
-    st.write("Images: " + str(len(state["images"])))
-    st.write("Motion: " + str(len(state["videos"])))
-    st.write("Resume System: Enabled")
-    st.write("Music: " + ("OK" if state["music"] else "Waiting"))
+    st.write("Scenes:", len(state["scenes"]))
+    st.write("Images:", len(state["images"]))
+    st.write("Videos:", len(state["videos"]))
+    st.write("Final movie:", "Ready" if state["final_movie"] else "Not ready")
 
+tab1, tab2, tab3 = st.tabs(["1. Story", "2. Generate", "3. Final Movie"])
 
-story = st.text_area(
-    "📝 مکمل کہانی یہاں paste کریں / Paste your full story",
-    height=220,
-    placeholder="Example: A thirsty crow was flying through a forest and found a pot of water."
-)
-
-
-col1, col2, col3 = st.columns(3)
-
-
-with col1:
-    duration = st.selectbox(
-        "Movie target duration",
-        [2, 3, 4, 5],
-        index=0
+with tab1:
+    st.subheader("اپنی مکمل کہانی یہاں لکھیں")
+    story = st.text_area(
+        "Story / کہانی",
+        value=state["story"],
+        height=240,
+        placeholder="Example: A thirsty crow flies over a forest...",
     )
 
+    if st.button("Create Scene Plan", type="primary"):
+        if not story.strip():
+            st.warning("پہلے کہانی لکھیں۔")
+        else:
+            state["story"] = story.strip()
+            state["scenes"] = make_scenes(story)
+            save_state(state)
+            st.success(f"{len(state['scenes'])} scenes تیار ہو گئے۔")
 
-with col2:
-    clips_per_scene = st.selectbox(
-        "Clips per scene",
-        [1, 2, 3],
-        index=0
+    for scene in state["scenes"]:
+        st.write(f"**Scene {scene['number']}** — {scene['text']}")
+        st.caption("Action: " + scene["action"])
+
+with tab2:
+    st.subheader("AI Generation")
+    clip_count = st.number_input(
+        "Motion clips per scene",
+        min_value=1,
+        max_value=3,
+        value=1,
+        step=1,
     )
-
-
-with col3:
     music_style = st.selectbox(
         "Background Music",
         [
@@ -405,316 +319,116 @@ with col3:
             "Magical / Fantasy",
             "Funny Cartoon",
             "Peaceful",
-            "Cinematic"
-        ]
+            "Cinematic",
+        ],
     )
 
-
-track = st.selectbox(
-    "Music variation",
-    [1, 2, 3, 4, 5]
-)
-
-volume = st.slider(
-    "Music volume",
-    0.05,
-    0.50,
-    0.16,
-    0.01
-)
-
-
-a, b, c = st.columns(3)
-
-
-with a:
-    make_plan = st.button(
-        "1️⃣ Make Scene Plan",
-        use_container_width=True
-    )
-
-
-with b:
-    make_images = st.button(
-        "2️⃣ Generate Images",
-        use_container_width=True
-    )
-
-
-with c:
-    make_motion = st.button(
-        "3️⃣ Generate AI Motion",
-        use_container_width=True
-    )
-
-
-if make_plan:
-
-    if not story.strip():
-        st.warning("پہلے کہانی لکھیں۔")
-
-    else:
-        state["scenes"] = make_scenes(story)
-        state["images"] = {}
-        state["videos"] = {}
-        state["movie"] = None
-        state["music"] = None
-
-        save_state(state)
-
-        st.success("Scene plan تیار ہو گیا۔")
-
-
-if state["scenes"]:
-
-    st.subheader("🎞️ Scene Plan")
-
-    for scene in state["scenes"]:
-        st.markdown(
-            f"**Scene {scene['number']}** — {scene['story']}  \n"
-            f"**Action:** {scene['action']}"
-        )
-
-
-if make_images:
-
-    if not state["scenes"]:
-        st.warning("پہلے Scene Plan بنائیں۔")
-
-    else:
-        progress = st.progress(0)
-        total = len(state["scenes"])
-
-        for index, scene in enumerate(
-            state["scenes"],
-            1
-        ):
-            key = str(scene["number"])
-            existing = state["images"].get(key)
-
-            if not existing or not Path(existing).exists():
-
-                path, error = generate_image(
-                    scene["prompt"],
-                    scene["number"]
-                )
-
-                if error:
-                    st.error(
-                        f"Scene {key}: {error}"
+    if st.button("Generate Images", type="primary"):
+        if not state["scenes"]:
+            st.warning("پہلے Scene Plan بنائیں۔")
+        else:
+            progress = st.progress(0.0)
+            for i, scene in enumerate(state["scenes"], 1):
+                key = str(scene["number"])
+                old = state["images"].get(key)
+                if old and Path(old).exists():
+                    st.write(f"Scene {i}: image already exists.")
+                else:
+                    st.write(f"Scene {i}: generating image...")
+                    image_path, error = generate_image(
+                        scene["text"] + ". Action: " + scene["action"],
+                        scene["number"],
                     )
-                    break
+                    if error:
+                        st.error(f"Scene {scene['number']}: {error}")
+                        break
+                    state["images"][key] = image_path
+                    save_state(state)
+                progress.progress(i / len(state["scenes"]))
+            st.success("Image generation step finished.")
 
-                state["images"][key] = path
-                save_state(state)
+    if st.button("Generate AI Motion"):
+        if not state["images"]:
+            st.warning("پہلے Images generate کریں۔")
+        else:
+            total = len(state["scenes"]) * int(clip_count)
+            done = 0
+            progress = st.progress(0.0)
 
-            progress.progress(index / total)
-
-        st.success("Images process مکمل ہو گیا۔")
-
-
-if make_motion:
-
-    if not state["images"]:
-        st.warning("پہلے images بنائیں۔")
-
-    else:
-        total = len(state["scenes"]) * clips_per_scene
-        done = 0
-        stopped = False
-        progress = st.progress(0)
-
-        for scene in state["scenes"]:
-
-            if stopped:
-                break
-
-            key = str(scene["number"])
-            image_path = state["images"].get(key)
-
-            if not image_path:
-                continue
-
-            for clip_no in range(
-                1,
-                clips_per_scene + 1
-            ):
-
-                vkey = f"{key}_{clip_no}"
-                existing = state["videos"].get(vkey)
-
-                if existing and Path(existing).exists():
-                    done += 1
-                    progress.progress(
-                        min(done / total, 1.0)
-                    )
+            for scene in state["scenes"]:
+                key = str(scene["number"])
+                image_path = state["images"].get(key)
+                if not image_path or not Path(image_path).exists():
+                    st.error(f"Scene {key} image missing.")
                     continue
 
-                path, error = create_ai_video(
-                    image_path,
-                    scene["action"],
-                    scene["number"],
-                    clip_no
-                )
+                for clip_no in range(1, int(clip_count) + 1):
+                    video_key = f"{key}_{clip_no}"
+                    old = state["videos"].get(video_key)
+                    if old and Path(old).exists():
+                        done += 1
+                        progress.progress(done / total)
+                        continue
 
-                if error:
-                    st.error(
-                        f"Scene {key}, clip {clip_no}: {error}"
+                    st.write(f"Generating Scene {key}, clip {clip_no}...")
+                    path, error = create_ai_video(
+                        image_path,
+                        scene["action"],
+                        scene["number"],
+                        clip_no,
                     )
-                    st.info(
-                        "Quota یا queue مسئلے کے بعد دوبارہ Resume کر سکتے ہیں۔"
-                    )
+                    if error:
+                        st.error(f"Scene {key}, clip {clip_no}: {error}")
+                        st.warning(
+                            "یہاں generation رک گئی ہے۔ پہلے سے بنا ہوا کام محفوظ ہے؛ "
+                            "بعد میں دوبارہ چلانے سے resume ہو سکتا ہے."
+                        )
+                        save_state(state)
+                        break
+
+                    state["videos"][video_key] = path
                     save_state(state)
-                    stopped = True
-                    break
+                    done += 1
+                    progress.progress(done / total)
 
-                state["videos"][vkey] = path
-                save_state(state)
+            st.success("Motion generation step finished.")
 
-                done += 1
+with tab3:
+    st.subheader("Final Movie")
 
-                progress.progress(
-                    min(done / total, 1.0)
-                )
+    video_paths = [
+        state["videos"][key]
+        for key in sorted(state["videos"])
+        if state["videos"].get(key)
+        and Path(state["videos"][key]).exists()
+    ]
 
-        if not stopped:
-            st.success(
-                "Motion process مکمل ہو گیا۔"
-            )
+    st.write("Available video clips:", len(video_paths))
 
-
-st.divider()
-
-
-if st.button(
-    "🎬 Build Full Movie",
-    use_container_width=True
-):
-
-    video_paths = []
-
-    for scene in state["scenes"]:
-
-        for clip_no in range(
-            1,
-            clips_per_scene + 1
-        ):
-
-            key = f"{scene['number']}_{clip_no}"
-            path = state["videos"].get(key)
-
-            if path and Path(path).exists():
-                video_paths.append(path)
-
-    if not video_paths:
-        st.warning(
-            "پہلے AI Motion clips بنائیں۔"
-        )
-
-    else:
-
-        base_movie = str(
-            APP_DIR / "cartoon_movie_no_music.mp4"
-        )
-
-        final_movie = str(
-            APP_DIR / "final_cartoon_movie.mp4"
-        )
-
-        with st.spinner(
-            "Movie assemble ہو رہی ہے..."
-        ):
-            path, error = combine_videos(
-                video_paths,
-                base_movie
-            )
-
-        if error:
-            st.error(error)
-
+    if st.button("Build Final Movie", type="primary"):
+        if not video_paths:
+            st.warning("ابھی کوئی video clips موجود نہیں۔")
         else:
-
-            music_path = create_music(
-                duration,
-                music_style,
-                track
-            )
-
-            state["music"] = music_path
-
-            path, error = add_music(
-                base_movie,
-                music_path,
-                final_movie,
-                volume
-            )
+            with st.spinner("Movie جوڑی جا رہی ہے..."):
+                final_path, error = combine_videos(video_paths)
 
             if error:
                 st.error(error)
-
             else:
-                state["movie"] = path
+                state["final_movie"] = final_path
                 save_state(state)
+                st.success("Final movie تیار ہے۔")
 
-                st.success(
-                    "🎉 Full movie تیار ہے!"
-                )
+    if state["final_movie"] and Path(state["final_movie"]).exists():
+        st.video(state["final_movie"])
+        with open(state["final_movie"], "rb") as f:
+            st.download_button(
+                "Download Movie",
+                f,
+                file_name="final_cartoon_movie.mp4",
+                mime="video/mp4",
+            )
 
-
-if state.get("movie") and Path(state["movie"]).exists():
-
-    st.subheader(
-        "🎥 Final Movie"
-    )
-
-    st.video(
-        state["movie"]
-    )
-
-    with open(
-        state["movie"],
-        "rb"
-    ) as file:
-
-        st.download_button(
-            "⬇️ Download Movie",
-            file,
-            file_name="final_cartoon_movie.mp4",
-            mime="video/mp4",
-            use_container_width=True
-        )
-
-
-with st.expander(
-    "🔄 Resume / Saved Project"
-):
-
-    st.write(
-        "Scenes saved: "
-        + str(len(state["scenes"]))
-    )
-
-    st.write(
-        "Images saved: "
-        + str(len(state["images"]))
-    )
-
-    st.write(
-        "Video clips saved: "
-        + str(len(state["videos"]))
-    )
-
-    st.write(
-        "Resume System is enabled."
-    )
-
-
-if st.button(
-    "🗑️ Reset Project"
-):
-
-    save_state(
-        default_state()
-    )
-
-    st.rerun()
+st.divider()
+st.caption("Resume data is saved inside cartoon_project.")
+        
