@@ -1,847 +1,169 @@
+"""
+Story -> Cartoon MP4, all in one page (with AI story writer).
 
-import os
-import json
+Install once:
+    pip install -r requirements.txt
+
+Run:
+    python main.py
+Open the link shown in the terminal.
+Either paste your own story, or type an idea and press the AI story button.
+Then press the video button. The finished MP4 appears below.
+"""
+
+import asyncio
 import re
-from pathlib import Path
+import tempfile
+import time
+import urllib.parse
 
-import streamlit as st
-from huggingface_hub import InferenceClient
+import edge_tts
+import gradio as gr
+import requests
+from deep_translator import GoogleTranslator
+from moviepy import (
+    AudioFileClip,
+    CompositeAudioClip,
+    CompositeVideoClip,
+    ImageClip,
+    afx,
+    concatenate_videoclips,
+)
 
-
-# =========================================================
-# SETTINGS
-# =========================================================
-
-APP_DIR = Path("cartoon_project")
-IMAGE_DIR = APP_DIR / "images"
-VIDEO_DIR = APP_DIR / "videos"
-
-APP_DIR.mkdir(exist_ok=True)
-IMAGE_DIR.mkdir(exist_ok=True)
-VIDEO_DIR.mkdir(exist_ok=True)
-
-PROJECT_FILE = APP_DIR / "project.json"
-
-
-IMAGE_MODEL = "black-forest-labs/FLUX.1-schnell"
-
-# Video model کو ابھی خالی رکھیں۔
-# بعد میں Hugging Face پر available image-to-video model
-# یہاں set کیا جا سکتا ہے۔
-VIDEO_MODEL = ""
-
-
-# =========================================================
-# SECRETS
-# =========================================================
-
-def get_hf_token():
-    try:
-        token = st.secrets.get("HF_TOKEN")
-        if token:
-            return token
-    except Exception:
-        pass
-
-    return os.getenv("HF_TOKEN", "")
-
-
-# =========================================================
-# PROJECT
-# =========================================================
-
-def empty_project():
-    return {
-        "title": "",
-        "language": "Urdu",
-        "style": (
-            "original preschool 3D cartoon, "
-            "colorful rounded characters, "
-            "friendly expressive faces, "
-            "soft cinematic lighting"
-        ),
-        "story": "",
-        "characters": [],
-        "locations": [],
-        "scenes": [],
-        "images": [],
-        "videos": []
-    }
-
-
-def load_project():
-    if PROJECT_FILE.exists():
-        try:
-            return json.loads(
-                PROJECT_FILE.read_text(
-                    encoding="utf-8"
-                )
-            )
-        except Exception:
-            pass
-
-    return empty_project()
-
-
-def save_project(project):
-    PROJECT_FILE.write_text(
-        json.dumps(
-            project,
-            ensure_ascii=False,
-            indent=2
-        ),
-        encoding="utf-8"
-    )
-
-
-# =========================================================
-# JSON HELPER
-# =========================================================
-
-def extract_json(text):
-
-    text = text.strip()
-
-    text = re.sub(
-        r"```json",
-        "",
-        text,
-        flags=re.IGNORECASE
-    )
-
-    text = text.replace(
-        "```",
-        ""
-    ).strip()
-
-    start = text.find("{")
-    end = text.rfind("}")
-
-    if start == -1 or end == -1:
-        raise ValueError(
-            "AI نے valid JSON واپس نہیں کیا۔"
-        )
-
-    return json.loads(
-        text[start:end + 1]
-    )
-
-
-# =========================================================
-# AI STORY PLANNER
-# =========================================================
-
-def create_story_plan(
-    story,
-    language,
-    style
-):
-
-    token = get_hf_token()
-
-    if not token:
-        raise RuntimeError(
-            "HF_TOKEN Streamlit Secrets میں موجود نہیں ہے۔"
-        )
-
-    client = InferenceClient(
-        api_key=token,
-        provider="auto"
-    )
-
-    system_prompt = """
-You are an expert children's animated movie planner.
-
-Convert the user's story into a production-ready
-cartoon movie plan.
-
-The visual style must be ORIGINAL.
-Do not copy Cocomelon or any existing copyrighted
-cartoon exactly.
-
-Return ONLY valid JSON.
-
-Required JSON:
-
-{
-  "title": "...",
-
-  "characters": [
-    {
-      "id": "character_1",
-      "name": "...",
-      "role": "...",
-      "species": "...",
-      "appearance": "...",
-      "clothing": "...",
-      "colors": "...",
-      "personality": "...",
-      "character_prompt": "..."
-    }
-  ],
-
-  "locations": [
-    {
-      "id": "location_1",
-      "name": "...",
-      "description": "...",
-      "location_prompt": "..."
-    }
-  ],
-
-  "scenes": [
-    {
-      "id": "scene_1",
-      "title": "...",
-      "duration_seconds": 5,
-      "location_id": "location_1",
-      "character_ids": ["character_1"],
-      "story_summary": "...",
-      "action": "...",
-      "dialogue": [
-        {
-          "character_id": "character_1",
-          "text": "..."
-        }
-      ],
-      "camera": "...",
-      "lighting": "...",
-      "image_prompt": "...",
-      "animation_prompt": "...",
-      "negative_prompt": "...",
-      "music_mood": "happy"
-    }
-  ]
+W, H = 1280, 720
+STYLE = "cute colorful 3D cartoon for kids, soft lighting, simple bright background, "
+SEED = 1234  # same seed helps keep the look similar across scenes
+VOICES = {
+    "اردو - لڑکی": "ur-PK-UzmaNeural",
+    "اردو - لڑکا": "ur-PK-AsadNeural",
+    "ہندی - لڑکی": "hi-IN-SwaraNeural",
+    "ہندی - لڑکا": "hi-IN-MadhurNeural",
 }
 
-Rules:
 
-- Keep characters visually consistent.
-- Keep clothing and colors consistent.
-- Every scene must use existing character IDs.
-- Every scene must use an existing location ID.
-- Scene duration should normally be 4-8 seconds.
-- Dialogue should be short.
-- Image prompts must be detailed.
-- Animation prompts must describe movement.
-- Make the movie suitable for children.
-"""
-
-    user_prompt = f"""
-Language:
-{language}
-
-Visual Style:
-{style}
-
-Story:
-{story}
-"""
-
-    response = client.chat.completions.create(
-        model="meta-llama/Llama-3.1-8B-Instruct",
-        messages=[
-            {
-                "role": "system",
-                "content": system_prompt
-            },
-            {
-                "role": "user",
-                "content": user_prompt
-            }
-        ],
-        max_tokens=7000,
-        temperature=0.3
+# ---------- AI: story writer (free text service, no key) ----------
+def write_story(idea, voice_name, sentences):
+    if not (idea or "").strip():
+        raise gr.Error("پہلے کہانی کا خیال لکھیں")
+    language = "Hindi" if "ہندی" in voice_name else "Urdu"
+    prompt = (
+        f"Write a short, simple, happy children's story in {language}. "
+        f"Use exactly {int(sentences)} short sentences, each on its own line. "
+        f"No title, no numbering, no extra text. Idea: {idea.strip()}"
     )
-
-    text = response.choices[0].message.content
-
-    return extract_json(text)
-
-
-# =========================================================
-# CHARACTER CONTEXT
-# =========================================================
-
-def get_character_context(
-    project,
-    character_ids
-):
-
-    output = []
-
-    characters = {
-        c.get("id"): c
-        for c in project.get(
-            "characters",
-            []
-        )
-    }
-
-    for cid in character_ids:
-
-        character = characters.get(cid)
-
-        if not character:
-            continue
-
-        output.append(
-            f"""
-Character:
-Name: {character.get("name", "")}
-Species: {character.get("species", "")}
-Appearance: {character.get("appearance", "")}
-Clothing: {character.get("clothing", "")}
-Colors: {character.get("colors", "")}
-Personality: {character.get("personality", "")}
-"""
-        )
-
-    return "\n".join(output)
+    url = "https://text.pollinations.ai/" + urllib.parse.quote(prompt)
+    try:
+        r = requests.get(url, timeout=120)
+        r.raise_for_status()
+    except Exception as e:
+        raise gr.Error(f"کہانی نہیں بن سکی، دوبارہ کوشش کریں: {e}")
+    return r.text.strip()
 
 
-# =========================================================
-# LOCATION CONTEXT
-# =========================================================
-
-def get_location_context(
-    project,
-    location_id
-):
-
-    for location in project.get(
-        "locations",
-        []
-    ):
-
-        if location.get("id") == location_id:
-
-            return f"""
-Location:
-{location.get("name", "")}
-
-Description:
-{location.get("description", "")}
-"""
-
-    return ""
+# ---------- Story -> scenes ----------
+def split_story(text):
+    scenes = []
+    for line in text.splitlines():
+        for part in re.split(r"(?<=[۔.!?؟])\s+", line.strip()):
+            if part.strip():
+                scenes.append(part.strip())
+    return scenes
 
 
-# =========================================================
-# FINAL IMAGE PROMPT
-# =========================================================
+# ---------- AI: translation for picture prompts ----------
+def to_english(text):
+    try:
+        return GoogleTranslator(source="auto", target="en").translate(text)
+    except Exception:
+        return text
 
-def make_image_prompt(
-    project,
-    scene
-):
 
-    characters = get_character_context(
-        project,
-        scene.get(
-            "character_ids",
-            []
-        )
+# ---------- AI: picture ----------
+def make_image(description, path):
+    url = (
+        "https://image.pollinations.ai/prompt/"
+        + urllib.parse.quote(STYLE + description)
+        + f"?width={W}&height={H}&nologo=true&seed={SEED}"
     )
-
-    location = get_location_context(
-        project,
-        scene.get(
-            "location_id",
-            ""
-        )
-    )
-
-    style = project.get(
-        "style",
-        "original preschool 3D cartoon"
-    )
-
-    return f"""
-{style}
-
-CHARACTER DESIGN:
-{characters}
-
-LOCATION:
-{location}
-
-SCENE:
-{scene.get("story_summary", "")}
-
-ACTION:
-{scene.get("action", "")}
-
-CAMERA:
-{scene.get("camera", "")}
-
-LIGHTING:
-{scene.get("lighting", "")}
-
-ORIGINAL IMAGE DESCRIPTION:
-{scene.get("image_prompt", "")}
-
-Create a high-quality 16:9 children's
-3D animation movie frame.
-
-Keep all characters consistent.
-
-Same face.
-Same body proportions.
-Same clothes.
-Same colors.
-
-Friendly expressive faces.
-Beautiful colorful environment.
-Soft cinematic lighting.
-Clean composition.
-Detailed 3D cartoon rendering.
-
-No text.
-No subtitles.
-No logo.
-No watermark.
-"""
+    last_error = None
+    for _ in range(3):
+        try:
+            r = requests.get(url, timeout=180)
+            r.raise_for_status()
+            with open(path, "wb") as f:
+                f.write(r.content)
+            return
+        except Exception as e:
+            last_error = e
+            time.sleep(3)
+    raise gr.Error(f"تصویر نہیں بن سکی: {last_error}")
 
 
-# =========================================================
-# IMAGE GENERATION
-# =========================================================
-
-def generate_image(
-    prompt,
-    filename
-):
-
-    token = get_hf_token()
-
-    if not token:
-        raise RuntimeError(
-            "HF_TOKEN موجود نہیں ہے۔"
-        )
-
-    client = InferenceClient(
-        api_key=token,
-        provider="auto"
-    )
-
-    image = client.text_to_image(
-        prompt=prompt,
-        model=IMAGE_MODEL,
-        width=1280,
-        height=720,
-        num_inference_steps=4
-    )
-
-    path = IMAGE_DIR / filename
-
-    image.save(path)
-
-    return str(path)
+# ---------- AI: voice ----------
+async def _tts(text, voice, path):
+    await edge_tts.Communicate(text, voice).save(path)
 
 
-# =========================================================
-# IMAGE → VIDEO
-# =========================================================
-
-def generate_video(
-    image_path,
-    prompt,
-    filename,
-    negative_prompt=""
-):
-
-    token = get_hf_token()
-
-    if not token:
-        raise RuntimeError(
-            "HF_TOKEN موجود نہیں ہے۔"
-        )
-
-    if not VIDEO_MODEL:
-        raise RuntimeError(
-            """
-VIDEO_MODEL ابھی configure نہیں ہے۔
-
-پہلے Image generation test کریں۔
-Video model بعد میں configure ہوگا۔
-"""
-        )
-
-    client = InferenceClient(
-        api_key=token,
-        provider="auto"
-    )
-
-    video_bytes = client.image_to_video(
-        image=image_path,
-        model=VIDEO_MODEL,
-        prompt=prompt,
-        negative_prompt=negative_prompt
-    )
-
-    output = VIDEO_DIR / filename
-
-    output.write_bytes(
-        video_bytes
-    )
-
-    return str(output)
+# ---------- One scene = picture + voice + camera zoom ----------
+def make_scene(sentence, character, voice, i, folder):
+    img = f"{folder}/s{i}.jpg"
+    aud = f"{folder}/s{i}.mp3"
+    description = (character + ", " if character else "") + to_english(sentence)
+    make_image(description, img)
+    asyncio.run(_tts(sentence, voice, aud))
+    audio = AudioFileClip(aud)
+    d = audio.duration + 0.6
+    clip = ImageClip(img).with_duration(d).resized(lambda t: 1 + 0.05 * t / d)
+    clip = CompositeVideoClip([clip.with_position("center")], size=(W, H)).with_duration(d)
+    return clip.with_audio(audio)
 
 
-# =========================================================
-# GENERATE ALL IMAGES
-# =========================================================
-
-def generate_all_images(project):
-
-    scenes = project.get(
-        "scenes",
-        []
-    )
-
+# ---------- Whole video ----------
+def generate(story, character, voice_name, music, max_scenes, progress=gr.Progress()):
+    scenes = split_story(story or "")[: int(max_scenes)]
     if not scenes:
-        raise RuntimeError(
-            "پہلے Story Plan بنائیں۔"
+        raise gr.Error("پہلے کہانی لکھیں")
+    voice = VOICES[voice_name]
+    folder = tempfile.mkdtemp()
+    clips = []
+    for i, sentence in enumerate(scenes):
+        progress(i / len(scenes), desc=f"سین {i + 1} / {len(scenes)} بن رہا ہے")
+        clips.append(make_scene(sentence, (character or "").strip(), voice, i, folder))
+
+    progress(0.95, desc="ویڈیو جوڑی جا رہی ہے")
+    video = concatenate_videoclips(clips, method="compose")
+    if music:
+        bg = AudioFileClip(music).with_effects(
+            [afx.AudioLoop(duration=video.duration), afx.MultiplyVolume(0.12)]
         )
-
-    results = []
-
-    progress = st.progress(0)
-
-    for index, scene in enumerate(
-        scenes
-    ):
-
-        scene_number = index + 1
-
-        st.write(
-            f"🎨 Scene {scene_number}/{len(scenes)} image..."
-        )
-
-        prompt = make_image_prompt(
-            project,
-            scene
-        )
-
-        filename = (
-            f"scene_{scene_number:03d}.png"
-        )
-
-        image_path = generate_image(
-            prompt,
-            filename
-        )
-
-        results.append(
-            image_path
-        )
-
-        progress.progress(
-            scene_number / len(scenes)
-        )
-
-    project["images"] = results
-
-    save_project(project)
-
-    return project
+        video = video.with_audio(CompositeAudioClip([video.audio, bg]))
+    out = f"{folder}/video.mp4"
+    video.write_videofile(out, fps=24, codec="libx264", audio_codec="aac")
+    return out
 
 
-# =========================================================
-# STREAMLIT
-# =========================================================
+# ---------- One-page screen ----------
+with gr.Blocks() as demo:
+    gr.Markdown("# کہانی سے کارٹون ویڈیو")
 
-st.set_page_config(
-    page_title="AI Cartoon Movie",
-    page_icon="🎬",
-    layout="wide"
-)
+    idea = gr.Textbox(label="کہانی کا خیال (اختیاری، AI کہانی لکھے گا)",
+                      placeholder="ایک چھوٹا خرگوش جو دوستی کرنا سیکھتا ہے")
+    sentences = gr.Slider(8, 30, value=16, step=1, label="کہانی کے جملے (تقریباً 2 منٹ = 16)")
+    story_btn = gr.Button("AI سے کہانی لکھواؤ")
 
-st.title(
-    "🎬 AI Cartoon Movie Generator"
-)
-
-st.caption(
-    "Script → Story → Characters → Scenes → Images → Video"
-)
-
-project = load_project()
-
-
-# =========================================================
-# TABS
-# =========================================================
-
-tab1, tab2, tab3 = st.tabs(
-    [
-        "📝 Script",
-        "🎨 Images",
-        "🎬 Video"
-    ]
-)
-
-
-# =========================================================
-# SCRIPT TAB
-# =========================================================
-
-with tab1:
-
-    st.header(
-        "اپنی کہانی لکھیں"
+    story = gr.Textbox(lines=10, label="کہانی (خود پیسٹ کریں یا AI والی ایڈٹ کریں)")
+    character = gr.Textbox(
+        label="کردار کی تفصیل (انگریزی میں، اختیاری)",
+        placeholder="a small brown rabbit with big ears and a blue scarf",
     )
+    voice = gr.Dropdown(list(VOICES), value="اردو - لڑکی", label="آواز")
+    music = gr.Audio(type="filepath", label="بیک گراؤنڈ میوزک (اختیاری)")
+    max_scenes = gr.Slider(1, 60, value=20, step=1, label="زیادہ سے زیادہ سین")
 
-    language = st.selectbox(
-        "Language",
-        [
-            "Urdu",
-            "Hindi",
-            "English"
-        ]
-    )
+    btn = gr.Button("ویڈیو بناؤ", variant="primary")
+    vid = gr.Video(label="تیار ویڈیو (MP4)")
 
-    style = st.text_input(
-        "Cartoon Style",
-        value=project.get(
-            "style",
-            "original preschool 3D cartoon"
-        )
-    )
+    story_btn.click(write_story, [idea, voice, sentences], story)
+    btn.click(generate, [story, character, voice, music, max_scenes], vid)
 
-    story = st.text_area(
-        "Story / Script",
-        value=project.get(
-            "story",
-            ""
-        ),
-        height=300
-    )
-
-    if st.button(
-        "🧠 Story کو Cartoon Plan بنائیں",
-        type="primary",
-        use_container_width=True
-    ):
-
-        if not story.strip():
-
-            st.error(
-                "پہلے story لکھیں۔"
-            )
-
-        else:
-
-            with st.spinner(
-                "AI story کو scenes میں تبدیل کر رہا ہے..."
-            ):
-
-                try:
-
-                    plan = create_story_plan(
-                        story,
-                        language,
-                        style
-                    )
-
-                    project.update(plan)
-
-                    project["story"] = story
-                    project["language"] = language
-                    project["style"] = style
-
-                    save_project(project)
-
-                    st.success(
-                        "Cartoon Plan تیار ہوگیا۔"
-                    )
-
-                except Exception as error:
-
-                    st.error(
-                        str(error)
-                    )
-
-
-    if project.get("characters"):
-
-        st.subheader(
-            "👧 Characters"
-        )
-
-        for character in project[
-            "characters"
-        ]:
-
-            st.write(
-                f"**{character.get('name')}** — "
-                f"{character.get('appearance')}"
-            )
-
-
-    if project.get("scenes"):
-
-        st.subheader(
-            "🎞 Scenes"
-        )
-
-        for scene in project[
-            "scenes"
-        ]:
-
-            with st.expander(
-                f"{scene.get('id')} — "
-                f"{scene.get('title')}"
-            ):
-
-                st.write(
-                    scene
-                )
-
-
-# =========================================================
-# IMAGE TAB
-# =========================================================
-
-with tab2:
-
-    st.header(
-        "🎨 Scene Images"
-    )
-
-    if not project.get("scenes"):
-
-        st.info(
-            "پہلے Script tab میں Cartoon Plan بنائیں۔"
-        )
-
-    else:
-
-        if st.button(
-            "🎨 تمام Scene Images بنائیں",
-            type="primary",
-            use_container_width=True
-        ):
-
-            try:
-
-                project = generate_all_images(
-                    project
-                )
-
-                st.success(
-                    "تمام images تیار ہوگئی ہیں۔"
-                )
-
-            except Exception as error:
-
-                st.error(
-                    str(error)
-                )
-
-
-        for image in project.get(
-            "images",
-            []
-        ):
-
-            if Path(image).exists():
-
-                st.image(
-                    image,
-                    use_container_width=True
-                )
-
-
-# =========================================================
-# VIDEO TAB
-# =========================================================
-
-with tab3:
-
-    st.header(
-        "🎬 Image → Video"
-    )
-
-    st.info(
-        """
-Image generation یہاں مکمل کی گئی ہے۔
-
-Video generation کے لیے پہلے مناسب
-Hugging Face image-to-video model configure کرنا ہوگا۔
-"""
-    )
-
-    if not project.get("images"):
-
-        st.warning(
-            "پہلے Images بنائیں۔"
-        )
-
-    else:
-
-        if not VIDEO_MODEL:
-
-            st.warning(
-                "VIDEO_MODEL ابھی configure نہیں ہے۔"
-            )
-
-        else:
-
-            if st.button(
-                "🎬 تمام Images کو Videos میں تبدیل کریں",
-                type="primary",
-                use_container_width=True
-            ):
-
-                videos = []
-
-                for index, scene in enumerate(
-                    project.get("scenes", [])
-                ):
-
-                    image_path = project[
-                        "images"
-                    ][index]
-
-                    prompt = scene.get(
-                        "animation_prompt",
-                        scene.get(
-                            "action",
-                            "gentle natural movement"
-                        )
-                    )
-
-                    negative = scene.get(
-                        "negative_prompt",
-                        "blurry, distorted, text, watermark"
-                    )
-
-                    try:
-
-                        video = generate_video(
-                            image_path,
-                            prompt,
-                            f"scene_{index + 1:03d}.mp4",
-                            negative
-                        )
-
-                        videos.append(
-                            video
-                        )
-
-                        st.video(
-                            video
-                        )
-
-                    except Exception as error:
-
-                        st.error(
-                            f"Scene {index + 1}: {error}"
-                        )
-
-                project["videos"] = videos
-
-                save_project(
-                    project
-        )
+demo.launch()
