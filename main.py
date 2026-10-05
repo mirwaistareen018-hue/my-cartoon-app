@@ -7,19 +7,16 @@ import math
 import wave
 import re
 
-st.set_page_config(
-    page_title="AI Cartoon Movie Generator",
-    layout="wide",
-)
+st.set_page_config(page_title="AI Cartoon Movie Generator", layout="wide")
 
-for key, value in {
+for key, default in {
     "scenes": [],
     "images": {},
     "videos": {},
     "full_movie": None,
 }.items():
     if key not in st.session_state:
-        st.session_state[key] = value
+        st.session_state[key] = default
 
 HF_TOKEN = st.secrets.get("HF_TOKEN", "")
 
@@ -198,6 +195,7 @@ def create_music(
     )
 
     sample_rate = 22050
+
     total_samples = int(
         max(0, duration) * sample_rate
     )
@@ -211,15 +209,13 @@ def create_music(
         wav.setsampwidth(2)
         wav.setframerate(sample_rate)
 
-        chunk_size = sample_rate
-
         for start in range(
             0,
             total_samples,
-            chunk_size,
+            sample_rate,
         ):
             end = min(
-                start + chunk_size,
+                start + sample_rate,
                 total_samples,
             )
 
@@ -582,10 +578,7 @@ def combine_clips(
             method="compose",
         )
 
-        if (
-            final.duration
-            > target_duration
-        ):
+        if final.duration > target_duration:
             trimmed = final.subclipped(
                 0,
                 target_duration,
@@ -743,9 +736,7 @@ def build_movie(
                 f"AI motion {clip_no}..."
             )
 
-            key = (
-                f"{number}_{clip_no}"
-            )
+            key = f"{number}_{clip_no}"
 
             video_path = (
                 st.session_state.videos.get(
@@ -830,11 +821,7 @@ def build_movie(
     if error:
         return None, error
 
-    done += 1
-
-    progress.progress(
-        1.0
-    )
+    progress.progress(1.0)
 
     return final_movie, None
 
@@ -937,9 +924,7 @@ if st.session_state.scenes:
         "🎭 Scene Plan"
     )
 
-    for scene in (
-        st.session_state.scenes
-    ):
+    for scene in st.session_state.scenes:
         number = scene["number"]
 
         st.subheader(
@@ -1009,4 +994,9 @@ if st.session_state.scenes:
                 )
 
                 if error:
-  
+                    st.error(error)
+
+                else:
+                    st.session_state.videos[
+                        f"{number}_1"
+           
