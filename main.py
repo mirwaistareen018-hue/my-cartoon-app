@@ -12,29 +12,17 @@ st.set_page_config(
     layout="wide",
 )
 
-# ---------------------------------------------------------
-# SESSION STATE
-# ---------------------------------------------------------
-
-default_state = {
+for key, value in {
     "scenes": [],
-    "generated_images": {},
-    "video_files": {},
-    "final_videos": {},
-    "full_movie_path": None,
-    "project_created": False,
-}
-
-for key, default in default_state.items():
+    "images": {},
+    "videos": {},
+    "full_movie": None,
+}.items():
     if key not in st.session_state:
-        st.session_state[key] = default
+        st.session_state[key] = value
 
 HF_TOKEN = st.secrets.get("HF_TOKEN", "")
 
-
-# ---------------------------------------------------------
-# IMAGE GENERATION
-# ---------------------------------------------------------
 
 def generate_image(prompt, scene_number):
     if not HF_TOKEN:
@@ -59,10 +47,6 @@ def generate_image(prompt, scene_number):
     except Exception as exc:
         return None, str(exc)
 
-
-# ---------------------------------------------------------
-# AI IMAGE TO VIDEO
-# ---------------------------------------------------------
 
 def create_ai_video(
     image_path,
@@ -96,18 +80,15 @@ def create_ai_video(
 
         prompt = (
             motion_prompt
-            + ", smooth natural movement, "
-            + "natural body movement, "
-            + "natural environmental movement, "
-            + "cinematic camera movement, "
+            + ", smooth natural movement, natural body movement, "
+            + "natural environmental movement, cinematic camera movement, "
             + "stable character appearance"
         )
 
         negative_prompt = (
-            "static image, frozen frame, no movement, "
-            + "blurry, distorted, deformed character, "
-            + "extra limbs, flickering, unstable face, "
-            + "warped body, bad anatomy"
+            "static image, frozen frame, blurry, distorted, "
+            + "deformed character, extra limbs, flickering, "
+            + "unstable face, warped body, bad anatomy"
         )
 
         result = client.predict(
@@ -131,21 +112,18 @@ def create_ai_video(
         if not generated:
             return None, "AI نے video file واپس نہیں کی۔"
 
+        if not isinstance(generated, str):
+            return None, "AI video response کا format سمجھ نہیں آیا۔"
+
         output = (
             f"videos/scene_{scene_number}"
             f"_clip_{clip_number}.mp4"
         )
 
-        if isinstance(generated, str):
-            shutil.copyfile(
-                generated,
-                output,
-            )
-        else:
-            return None, (
-                "AI video response کا format "
-                "سمجھ نہیں آیا۔"
-            )
+        shutil.copyfile(
+            generated,
+            output,
+        )
 
         return output, None
 
@@ -160,11 +138,7 @@ def create_ai_video(
                 pass
 
 
-# ---------------------------------------------------------
-# BACKGROUND MUSIC
-# ---------------------------------------------------------
-
-def create_background_music(
+def create_music(
     style,
     duration,
     output_path,
@@ -224,32 +198,28 @@ def create_background_music(
     )
 
     sample_rate = 22050
-    beat_seconds = 0.5
     total_samples = int(
-        duration * sample_rate
+        max(0, duration) * sample_rate
     )
 
     with wave.open(
         output_path,
         "w",
-    ) as wav_file:
+    ) as wav:
 
-        wav_file.setnchannels(1)
-        wav_file.setsampwidth(2)
-        wav_file.setframerate(sample_rate)
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
 
-        chunk_seconds = 1
-        chunk_samples = (
-            sample_rate * chunk_seconds
-        )
+        chunk_size = sample_rate
 
         for start in range(
             0,
             total_samples,
-            chunk_samples,
+            chunk_size,
         ):
             end = min(
-                start + chunk_samples,
+                start + chunk_size,
                 total_samples,
             )
 
@@ -263,48 +233,31 @@ def create_background_music(
                     sample_index / sample_rate
                 )
 
-                beat_index = int(
-                    time_value / beat_seconds
-                )
-
                 note = pattern[
-                    beat_index % len(pattern)
+                    int(time_value / 0.5)
+                    % len(pattern)
                 ]
-
-                frequency = note
-
-                envelope = (
-                    0.7
-                    + 0.3
-                    * math.sin(
-                        2
-                        * math.pi
-                        * time_value
-                        / 8
-                    )
-                )
 
                 value = (
                     math.sin(
                         2
                         * math.pi
-                        * frequency
+                        * note
                         * time_value
                     )
                     * volume
-                    * envelope
                 )
 
                 value += (
-                    0.35
-                    * math.sin(
+                    math.sin(
                         2
                         * math.pi
-                        * frequency
+                        * note
                         * 2
                         * time_value
                     )
                     * volume
+                    * 0.25
                 )
 
                 value = max(
@@ -312,111 +265,25 @@ def create_background_music(
                     min(1.0, value),
                 )
 
-                integer_value = int(
-                    value * 32767
-                )
-
                 frames.append(
-                    integer_value.to_bytes(
+                    int(
+                        value * 32767
+                    ).to_bytes(
                         2,
                         "little",
                         signed=True,
                     )
                 )
 
-            wav_file.writeframes(
+            wav.writeframes(
                 b"".join(frames)
             )
 
 
-# ---------------------------------------------------------
-# MUSIC FOR SINGLE SCENE
-# ---------------------------------------------------------
-
-def add_music_to_video(
-    video_path,
-    style,
-    scene_number,
-    volume=0.18,
-):
-    try:
-        from moviepy import (
-            VideoFileClip,
-            AudioFileClip,
-        )
-
-        video = VideoFileClip(video_path)
-
-        duration = float(
-            video.duration
-        )
-
-        os.makedirs(
-            "music",
-            exist_ok=True,
-        )
-
-        audio_path = (
-            f"music/scene_{scene_number}.wav"
-        )
-
-        create_background_music(
-            style,
-            duration,
-            audio_path,
-            volume,
-            1,
-        )
-
-        audio = AudioFileClip(
-            audio_path
-        )
-
-        final_video = video.with_audio(
-            audio
-        )
-
-        os.makedirs(
-            "final_videos",
-            exist_ok=True,
-        )
-
-        output = (
-            f"final_videos/"
-            f"scene_{scene_number}_music.mp4"
-        )
-
-        final_video.write_videofile(
-            output,
-            codec="libx264",
-            audio_codec="aac",
-            fps=24,
-            logger=None,
-        )
-
-        audio.close()
-        video.close()
-        final_video.close()
-
-        return output, None
-
-    except Exception as exc:
-        return None, str(exc)
-
-
-# ---------------------------------------------------------
-# STORY SPLITTER
-# ---------------------------------------------------------
-
 def split_story(story, count):
-    clean = story.strip()
-
-    if not clean:
-        return []
-
     parts = re.split(
         r"(?<=[.!?۔])\s+|\n+",
-        clean,
+        story.strip(),
     )
 
     parts = [
@@ -425,21 +292,24 @@ def split_story(story, count):
         if part.strip()
     ]
 
+    if not parts:
+        return []
+
     if len(parts) <= count:
         return parts
-
-    groups = []
 
     size = math.ceil(
         len(parts) / count
     )
+
+    result = []
 
     for index in range(
         0,
         len(parts),
         size,
     ):
-        groups.append(
+        result.append(
             " ".join(
                 parts[
                     index:index + size
@@ -447,12 +317,45 @@ def split_story(story, count):
             )
         )
 
-    return groups[:count]
+    return result[:count]
 
 
-# ---------------------------------------------------------
-# ACTION DETECTOR
-# ---------------------------------------------------------
+def character_description(story):
+    text = story.lower()
+
+    if (
+        "crow" in text
+        or "کوا" in text
+        or "کوّا" in text
+    ):
+        return (
+            "a cute cartoon crow with black feathers, "
+            "expressive eyes and orange beak"
+        )
+
+    if (
+        "rabbit" in text
+        or "خرگوش" in text
+    ):
+        return (
+            "a cute cartoon rabbit with soft white fur "
+            "and expressive eyes"
+        )
+
+    if (
+        "fox" in text
+        or "لومڑی" in text
+    ):
+        return (
+            "a cute cartoon fox with orange fur "
+            "and expressive eyes"
+        )
+
+    return (
+        "a cute colorful cartoon main character "
+        "with expressive eyes"
+    )
+
 
 def detect_action(text):
     lower = text.lower()
@@ -469,8 +372,7 @@ def detect_action(text):
         ]
     ):
         return (
-            "the character flies smoothly "
-            "through the environment"
+            "flies smoothly through the environment"
         )
 
     if any(
@@ -479,29 +381,28 @@ def detect_action(text):
             "stone",
             "stones",
             "pebble",
-            "pebbles",
             "پتھر",
             "کنکر",
         ]
     ):
         return (
-            "the character picks up small "
-            "stones and drops them carefully"
+            "picks up small stones "
+            "and drops them carefully"
         )
 
     if any(
         word in lower
         for word in [
+            "water",
             "drink",
             "drinks",
-            "water",
             "پانی",
             "پیتا",
             "پیتی",
         ]
     ):
         return (
-            "the character drinks water happily"
+            "drinks water happily"
         )
 
     if any(
@@ -514,8 +415,8 @@ def detect_action(text):
         ]
     ):
         return (
-            "the character walks toward "
-            "the pot and looks inside"
+            "walks toward the pot "
+            "and looks inside"
         )
 
     if any(
@@ -525,13 +426,10 @@ def detect_action(text):
             "runs",
             "running",
             "دوڑ",
-            "دوڑتا",
-            "دوڑتی",
         ]
     ):
         return (
-            "the character runs naturally "
-            "through the scene"
+            "runs naturally through the scene"
         )
 
     if any(
@@ -540,14 +438,12 @@ def detect_action(text):
             "walk",
             "walks",
             "walking",
-            "چل",
             "چلتا",
             "چلتی",
         ]
     ):
         return (
-            "the character walks naturally "
-            "through the scene"
+            "walks naturally through the scene"
         )
 
     if any(
@@ -558,13 +454,10 @@ def detect_action(text):
             "see",
             "sees",
             "دیکھ",
-            "دیکھتا",
-            "دیکھتی",
         ]
     ):
         return (
-            "the character looks around "
-            "and reacts naturally"
+            "looks around and reacts naturally"
         )
 
     if any(
@@ -574,155 +467,68 @@ def detect_action(text):
             "happily",
             "خوش",
             "مسکرا",
-            "مسکراتا",
-            "مسکراتی",
         ]
     ):
         return (
-            "the character becomes happy "
-            "and moves with cheerful energy"
-        )
-
-    if any(
-        word in lower
-        for word in [
-            "sad",
-            "cry",
-            "cries",
-            "اداس",
-            "روتا",
-            "روتی",
-        ]
-    ):
-        return (
-            "the character shows gentle "
-            "sad emotion and slow movement"
+            "becomes happy and moves cheerfully"
         )
 
     return (
-        "the character moves naturally "
-        "with subtle body and environmental motion"
+        "moves naturally with subtle "
+        "body and environmental motion"
     )
 
 
-# ---------------------------------------------------------
-# CHARACTER DESCRIPTION
-# ---------------------------------------------------------
-
-def character_description(story):
-    lower = story.lower()
-
-    if any(
-        word in lower
-        for word in [
-            "crow",
-            "کوا",
-            "کوّا",
-        ]
-    ):
-        return (
-            "a cute friendly cartoon crow, "
-            "black feathers, expressive eyes, "
-            "small orange beak, "
-            "consistent character design"
-        )
-
-    if any(
-        word in lower
-        for word in [
-            "rabbit",
-            "خرگوش",
-        ]
-    ):
-        return (
-            "a cute friendly cartoon rabbit, "
-            "soft white fur, expressive eyes, "
-            "small pink nose, "
-            "consistent character design"
-        )
-
-    if any(
-        word in lower
-        for word in [
-            "fox",
-            "لومڑی",
-        ]
-    ):
-        return (
-            "a cute friendly cartoon fox, "
-            "orange fur, expressive eyes, "
-            "white chest, "
-            "consistent character design"
-        )
-
-    return (
-        "a cute colorful cartoon main character, "
-        "expressive eyes, friendly appearance, "
-        "consistent character design"
-    )
-
-
-# ---------------------------------------------------------
-# SCENE PLAN
-# ---------------------------------------------------------
-
-def create_scene_plan(
-    story,
-    count,
-):
-    parts = split_story(
+def make_scene_plan(story, count):
+    pieces = split_story(
         story,
         count,
     )
-
-    if not parts:
-        return []
 
     character = character_description(
         story
     )
 
-    plan = []
+    scenes = []
 
     for number, text in enumerate(
-        parts,
-        start=1,
+        pieces,
+        1,
     ):
-        action = detect_action(text)
+        action = detect_action(
+            text
+        )
 
         image_prompt = (
             "high quality 3D cartoon movie frame, "
             + character
             + ", beautiful cinematic environment, "
-            + "soft lighting, colorful family friendly "
-            + "animation, scene action: "
+            + "colorful family friendly animation, "
+            + "soft lighting, consistent character design, "
+            + "story moment: "
             + text
         )
 
         motion_prompt = (
             action
-            + ", based on this story moment: "
+            + ", story moment: "
             + text
         )
 
-        plan.append(
+        scenes.append(
             {
-                "scene": number,
+                "number": number,
                 "story": text,
                 "image_prompt": image_prompt,
                 "motion_prompt": motion_prompt,
             }
         )
 
-    return plan
+    return scenes
 
 
-# ---------------------------------------------------------
-# COMBINE VIDEO CLIPS
-# ---------------------------------------------------------
-
-def combine_video_clips(
-    video_paths,
+def combine_clips(
+    paths,
     output_path,
     target_duration,
 ):
@@ -732,68 +538,63 @@ def combine_video_clips(
             concatenate_videoclips,
         )
 
-        if not video_paths:
+        valid = [
+            path
+            for path in paths
+            if path
+            and os.path.exists(path)
+        ]
+
+        if not valid:
             return None, (
                 "کوئی video clips نہیں ملیں۔"
             )
 
-        source_clips = []
+        source = [
+            VideoFileClip(path)
+            for path in valid
+        ]
 
-        for path in video_paths:
-            if (
-                path
-                and os.path.exists(path)
-            ):
-                source_clips.append(
-                    VideoFileClip(path)
-                )
-
-        if not source_clips:
-            return None, (
-                "Valid video clips نہیں ملیں۔"
-            )
-
-        total_duration = sum(
+        total = sum(
             float(clip.duration)
-            for clip in source_clips
+            for clip in source
         )
 
-        if total_duration < target_duration:
-            repeats = math.ceil(
-                target_duration
-                / total_duration
+        if total <= 0:
+            for clip in source:
+                clip.close()
+
+            return None, (
+                "Video duration صفر ہے۔"
             )
 
-            clips = (
-                source_clips
-                * repeats
-            )
-        else:
-            clips = source_clips
+        repeats = max(
+            1,
+            math.ceil(
+                target_duration / total
+            ),
+        )
 
-        final_clip = concatenate_videoclips(
-            clips,
+        selected = source * repeats
+
+        final = concatenate_videoclips(
+            selected,
             method="compose",
         )
 
         if (
-            final_clip.duration
+            final.duration
             > target_duration
         ):
-            final_clip = (
-                final_clip.subclipped(
-                    0,
-                    target_duration,
-                )
+            trimmed = final.subclipped(
+                0,
+                target_duration,
             )
 
-        os.makedirs(
-            os.path.dirname(output_path)
-            or ".",
-            exist_ok=True,
-        )
+            final.close()
+            final = trimmed
 
-        final_clip.write_videofile(
+        final.write_videofile(
             output_path,
             codec="libx264",
             audio_codec="aac",
@@ -801,9 +602,9 @@ def combine_video_clips(
             logger=None,
         )
 
-        final_clip.close()
+        final.close()
 
-        for clip in source_clips:
+        for clip in source:
             clip.close()
 
         return output_path, None
@@ -812,11 +613,7 @@ def combine_video_clips(
         return None, str(exc)
 
 
-# ---------------------------------------------------------
-# FULL MOVIE MUSIC
-# ---------------------------------------------------------
-
-def add_full_movie_music(
+def add_full_music(
     video_path,
     style,
     track,
@@ -832,22 +629,13 @@ def add_full_movie_music(
             video_path
         )
 
-        duration = float(
-            video.duration
-        )
-
-        os.makedirs(
-            "music",
-            exist_ok=True,
-        )
-
         music_path = (
-            "music/full_movie_music.wav"
+            "music/full_movie.wav"
         )
 
-        create_background_music(
+        create_music(
             style,
-            duration,
+            float(video.duration),
             music_path,
             volume,
             track,
@@ -857,15 +645,15 @@ def add_full_movie_music(
             music_path
         )
 
-        final_video = video.with_audio(
+        final = video.with_audio(
             audio
         )
 
         output = (
-            "final_movie_with_music.mp4"
+            "final_cartoon_movie.mp4"
         )
 
-        final_video.write_videofile(
+        final.write_videofile(
             output,
             codec="libx264",
             audio_codec="aac",
@@ -873,9 +661,9 @@ def add_full_movie_music(
             logger=None,
         )
 
+        final.close()
         audio.close()
         video.close()
-        final_video.close()
 
         return output, None
 
@@ -883,13 +671,9 @@ def add_full_movie_music(
         return None, str(exc)
 
 
-# ---------------------------------------------------------
-# FULL MOVIE BUILDER
-# ---------------------------------------------------------
-
-def build_full_movie(
+def build_movie(
     scenes,
-    target_duration,
+    duration_minutes,
     clips_per_scene,
     music_style,
     music_track,
@@ -897,40 +681,28 @@ def build_full_movie(
     progress,
     status,
 ):
-    os.makedirs(
-        "images",
-        exist_ok=True,
-    )
-
-    os.makedirs(
-        "videos",
-        exist_ok=True,
-    )
-
     all_clips = []
 
     total_steps = max(
         1,
         len(scenes)
-        + len(scenes)
-        * clips_per_scene
+        * (1 + clips_per_scene)
         + 2,
     )
 
-    completed = 0
+    done = 0
 
     for scene in scenes:
-        number = scene["scene"]
+        number = scene["number"]
 
         status.write(
-            f"🖼️ Scene {number}: "
-            "image بن رہی ہے..."
+            f"🖼️ Scene {number}: AI image..."
         )
 
         image_path = (
-            st.session_state
-            .generated_images
-            .get(number)
+            st.session_state.images.get(
+                number
+            )
         )
 
         if (
@@ -943,4 +715,298 @@ def build_full_movie(
                 generate_image(
                     scene["image_prompt"],
                     number,
-                
+                )
+            )
+
+            if error:
+                return None, error
+
+            st.session_state.images[
+                number
+            ] = image_path
+
+        done += 1
+
+        progress.progress(
+            min(
+                1.0,
+                done / total_steps,
+            )
+        )
+
+        for clip_no in range(
+            1,
+            clips_per_scene + 1,
+        ):
+            status.write(
+                f"🎥 Scene {number}: "
+                f"AI motion {clip_no}..."
+            )
+
+            key = (
+                f"{number}_{clip_no}"
+            )
+
+            video_path = (
+                st.session_state.videos.get(
+                    key
+                )
+            )
+
+            if (
+                not video_path
+                or not os.path.exists(
+                    video_path
+                )
+            ):
+                video_path, error = (
+                    create_ai_video(
+                        image_path,
+                        scene["motion_prompt"],
+                        number,
+                        clip_no,
+                    )
+                )
+
+                if error:
+                    return None, error
+
+                st.session_state.videos[
+                    key
+                ] = video_path
+
+            all_clips.append(
+                video_path
+            )
+
+            done += 1
+
+            progress.progress(
+                min(
+                    1.0,
+                    done / total_steps,
+                )
+            )
+
+    status.write(
+        "✂️ Clips کو ایک movie میں "
+        "جوڑا جا رہا ہے..."
+    )
+
+    silent_movie, error = (
+        combine_clips(
+            all_clips,
+            "full_movie_silent.mp4",
+            duration_minutes * 60,
+        )
+    )
+
+    if error:
+        return None, error
+
+    done += 1
+
+    progress.progress(
+        min(
+            1.0,
+            done / total_steps,
+        )
+    )
+
+    status.write(
+        "🎵 پوری movie کے لیے "
+        "music بن رہی ہے..."
+    )
+
+    final_movie, error = (
+        add_full_music(
+            silent_movie,
+            music_style,
+            music_track,
+            music_volume,
+        )
+    )
+
+    if error:
+        return None, error
+
+    done += 1
+
+    progress.progress(
+        1.0
+    )
+
+    return final_movie, None
+
+
+st.title(
+    "🎬 AI Cartoon Movie Generator"
+)
+
+st.write(
+    "Story → Scenes → AI Images → "
+    "AI Motion → Continuous Music → Final MP4"
+)
+
+language = st.selectbox(
+    "🌐 Language",
+    [
+        "English",
+        "Urdu",
+        "Hindi",
+    ],
+)
+
+story = st.text_area(
+    "📝 Full Story / Script",
+    height=220,
+    placeholder=(
+        "اپنی پوری کہانی یہاں paste کریں..."
+    ),
+)
+
+duration = st.selectbox(
+    "⏱️ Movie Duration",
+    [2, 3, 4, 5],
+)
+
+music_style = st.selectbox(
+    "🎵 Background Music",
+    [
+        "Happy / Cheerful",
+        "Cute / Sweet",
+        "Farm / Nature",
+        "Magical / Fantasy",
+        "Funny Cartoon",
+        "Peaceful",
+        "Cinematic",
+    ],
+)
+
+music_track = st.selectbox(
+    "🎼 Music Variation",
+    [1, 2, 3],
+)
+
+music_volume = st.slider(
+    "🔊 Music Volume",
+    0.05,
+    0.35,
+    0.18,
+    0.01,
+)
+
+clips_per_scene = st.selectbox(
+    "🎥 AI Clips per Scene",
+    [1, 2, 3],
+    index=1,
+)
+
+
+if st.button(
+    "🧠 Create Cartoon Movie Project",
+    use_container_width=True,
+):
+    if not story.strip():
+        st.warning(
+            "پہلے story لکھیں۔"
+        )
+
+    else:
+        st.session_state.scenes = (
+            make_scene_plan(
+                story,
+                duration * 4,
+            )
+        )
+
+        st.session_state.images = {}
+        st.session_state.videos = {}
+        st.session_state.full_movie = None
+
+        st.success(
+            f"{len(st.session_state.scenes)} "
+            "scenes تیار ہیں۔"
+        )
+
+
+if st.session_state.scenes:
+    st.divider()
+
+    st.header(
+        "🎭 Scene Plan"
+    )
+
+    for scene in (
+        st.session_state.scenes
+    ):
+        number = scene["number"]
+
+        st.subheader(
+            f"Scene {number}"
+        )
+
+        st.write(
+            scene["story"]
+        )
+
+        st.caption(
+            "🎬 "
+            + scene["motion_prompt"]
+        )
+
+        if st.button(
+            f"🖼️ Generate Image {number}",
+            key=f"image_btn_{number}",
+        ):
+            path, error = (
+                generate_image(
+                    scene["image_prompt"],
+                    number,
+                )
+            )
+
+            if error:
+                st.error(error)
+
+            else:
+                st.session_state.images[
+                    number
+                ] = path
+
+                st.success(
+                    "Image تیار ہے۔"
+                )
+
+        image_path = (
+            st.session_state.images.get(
+                number
+            )
+        )
+
+        if (
+            image_path
+            and os.path.exists(
+                image_path
+            )
+        ):
+            st.image(
+                image_path,
+                use_container_width=True,
+            )
+
+            if st.button(
+                f"🎥 Animate Scene {number}",
+                key=f"animate_btn_{number}",
+            ):
+                path, error = (
+                    create_ai_video(
+                        image_path,
+                        scene["motion_prompt"],
+                        number,
+                        1,
+                    )
+                )
+
+                if error:
+  
