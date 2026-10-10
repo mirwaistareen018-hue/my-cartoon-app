@@ -1,26 +1,64 @@
-import streamlit as st
-import google.generativeai as genai
 
-api_key = st.secrets["GEMINI_API_KEY"]
-genai.configure(api_key=api_key)
+   from ursina import *
+from ursina.prefabs.first_person_controller import FirstPersonController
+import random
 
-model = genai.GenerativeModel('gemini-pro')
+app = Ursina()
 
-st.title("🎨 میری کارٹون کہانی ایپ")
-
-mera_script = st.text_area(
-    "اپنا سکرپٹ یہاں لکھیں:",
-    "ایک چھوٹا خرگوش تھا جو جنگل میں رہتا تھا۔"
+# زمین
+ground = Entity(
+    model='plane',
+    scale=(100, 1, 100),
+    color=color.green,
+    texture='white_cube',
+    texture_scale=(100, 100),
+    collider='box'
 )
 
-if st.button("کہانی بنائیں"):
-    if mera_script:
-        with st.spinner("کہانی بن رہی ہے..."):
-            prompt = "تم ایک بچوں کے کہانی لکھنے والے ہو۔ اس سکرپٹ کو 3 منٹ کی مکمل کہانی بنا دو، بچوں کے لیے سادہ اردو میں: " + mera_script
-            
-            response = model.generate_content(prompt)
-            
-            st.subheader("📖 آپ کی کہانی:")
-            st.write(response.text)
-    else:
-        st.warning("پہلے سکرپٹ لکھیں!")
+# کھلاڑی کی گاڑی (کارٹون انداز)
+player = Entity(
+    model='cube',
+    color=color.red,
+    scale=(2, 1, 4),
+    position=(0, 0.5, 0),
+    collider='box'
+)
+
+# دشمن گاڑیاں
+enemies = []
+for i in range(3):
+    enemy = Entity(
+        model='cube',
+        color=color.random_color(),
+        scale=(2, 1, 4),
+        position=(random.randint(-10, 10), 0.5, random.randint(20, 50)),
+        collider='box'
+    )
+    enemies.append(enemy)
+
+# کیمرہ پیروی
+camera.position = (0, 8, -15)
+camera.rotation_x = 20
+
+speed = 10
+score = 0
+
+def update():
+    global speed, score
+    # کھلاڑی کی حرکت
+    player.x += (held_keys['d'] - held_keys['a']) * time.dt * speed
+    player.z += (held_keys['w'] - held_keys['s']) * time.dt * speed
+    
+    # کیمرہ پیروی
+    camera.position = player.position + Vec3(0, 8, -15)
+    
+    # دشمن کی حرکت
+    for enemy in enemies:
+        enemy.z -= time.dt * 5
+        if enemy.z < -20:
+            enemy.z = random.randint(30, 60)
+            enemy.x = random.randint(-10, 10)
+            score += 1
+            print(f"سکور: {score}")
+
+app.run()
