@@ -1,2 +1,12 @@
-# my-cartoon-app
-My AI cartoon app
+# 🎮 3D کارٹون ریسنگ گیم
+
+بچوں کے لیے مزے دار 3D ریسنگ گیم جس میں گاڑیاں اور جانور حصہ لیتے ہیں۔
+
+## 📦 انسٹالیشن
+
+پہلے پائتھون انسٹال کرو: [python.org](https://python.org)
+
+پھر لائبریریاں انسٹال کرو:
+
+```bash
+pip install -r requirements.txt
