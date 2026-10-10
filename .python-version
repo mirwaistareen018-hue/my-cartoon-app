@@ -1,1 +1,13 @@
-Python 3.11
+Python Version Required: 3.10 or higher
+Recommended: Python 3.11 or 3.12
+
+Check your version with this command:
+python --version
+
+If your version is below 3.10, download the latest:
+https://www.python.org/downloads/
+
+Tested on:
+- Python 3.11.5 (Windows)
+- Python 3.12.0 (Mac)
+- Python 3.10.12 (Linux)
